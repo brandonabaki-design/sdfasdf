@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AISA Student Hub</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>AISA Student Hub</h1>
+    <p id="status">Sign in with your <strong>aisa.sch.ae</strong> account to continue.</p>
+
+    <div id="signin-container">
+      <div id="g-signin-button"></div>
+    </div>
+
+    <section id="signed-in" hidden>
+      <p>
+        Hi <span id="user-name"></span>
+        <span class="muted">(<span id="user-email"></span>)</span>
+      </p>
+      <button id="im-here" class="primary">I'm here</button>
+      <p id="result" aria-live="polite"></p>
+      <button id="sign-out" class="link">Sign out</button>
+    </section>
+
+    <footer>
+      <p class="muted small">
+        Data logged: your aisa.sch.ae email, name, action, and timestamp.
+      </p>
+    </footer>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
+</body>
+</html>
