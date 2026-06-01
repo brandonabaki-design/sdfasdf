@@ -8,6 +8,8 @@ const ALLOWED_HD = 'aisa.sch.ae';
 const EVENTS_SHEET = 'StudentEvents';
 const PROMPTS_SHEET = 'Prompts';
 const RESPONSES_SHEET = 'Responses';
+const COMPLETIONS_SHEET = 'Completions';
+const COMPLETIONS_HEADERS = ['id', 'completed_at', 'google_sub', 'student_email', 'prompt_id'];
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status', 'closes_at', 'audience', 'shared_from'];
 const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason', 'resolved'];
@@ -86,7 +88,13 @@ function doPost(e) {
         });
 
       case 'list_prompts':
-        return jsonOut_({ ok: true, prompts: listActivePrompts_(claims.email) });
+        return jsonOut_({ ok: true, prompts: listActivePrompts_(claims) });
+
+      case 'mark_complete':
+        return jsonOut_(markComplete_(claims, payload.prompt_id || ''));
+
+      case 'unmark_complete':
+        return jsonOut_(unmarkComplete_(claims, payload.prompt_id || ''));
 
       case 'create_prompt':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
@@ -191,19 +199,21 @@ function logEvent_(claims, action, clientTimestamp) {
   return { ok: true, timestamp: serverTimestamp.toISOString() };
 }
 
-function listActivePrompts_(viewerEmail) {
+function listActivePrompts_(claims) {
   const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   const values = sheet.getRange(2, 1, lastRow - 1, PROMPTS_HEADERS.length).getValues();
-  const viewer = String(viewerEmail || '').toLowerCase();
+  const viewer = String((claims && claims.email) || '').toLowerCase();
+  const viewerSub = (claims && claims.sub) || '';
   const viewerIsTeacher = isTeacher_(viewer);
+
+  const completedSet = (!viewerIsTeacher && viewerSub) ? getCompletedPromptIdsForUser_(viewerSub) : null;
+
   return values
     .filter(r => String(r[5]).toLowerCase() === 'active')
     .filter(r => {
-      // Teachers see every active prompt in their dashboard.
       if (viewerIsTeacher) return true;
-      // Students filter by audience. Blank / "all" / "everyone" = all students.
       const audience = String(r[7] || '').trim().toLowerCase();
       if (!audience || audience === 'all' || audience === 'everyone') return true;
       const allowed = audience.split(/[,;\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -219,8 +229,58 @@ function listActivePrompts_(viewerEmail) {
       closes_at: r[6] instanceof Date ? r[6].toISOString() : (r[6] ? String(r[6]) : ''),
       audience: r[7] || '',
       shared_from: r[8] || '',
+      completed: completedSet ? completedSet.has(r[0]) : false,
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
+function getCompletedPromptIdsForUser_(sub) {
+  const sheet = getOrCreateSheet_(COMPLETIONS_SHEET, COMPLETIONS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  const set = new Set();
+  if (lastRow < 2) return set;
+  const values = sheet.getRange(2, 1, lastRow - 1, COMPLETIONS_HEADERS.length).getValues();
+  for (const r of values) {
+    if (r[2] === sub) set.add(r[4]);
+  }
+  return set;
+}
+
+function markComplete_(claims, promptId) {
+  if (!promptId) return { ok: false, error: 'prompt_id required' };
+  const sheet = getOrCreateSheet_(COMPLETIONS_SHEET, COMPLETIONS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const values = sheet.getRange(2, 1, lastRow - 1, COMPLETIONS_HEADERS.length).getValues();
+    for (const r of values) {
+      if (r[2] === claims.sub && r[4] === promptId) {
+        return { ok: true, already: true };
+      }
+    }
+  }
+  sheet.appendRow([
+    Utilities.getUuid(),
+    new Date(),
+    claims.sub,
+    claims.email,
+    promptId,
+  ]);
+  return { ok: true };
+}
+
+function unmarkComplete_(claims, promptId) {
+  if (!promptId) return { ok: false, error: 'prompt_id required' };
+  const sheet = getOrCreateSheet_(COMPLETIONS_SHEET, COMPLETIONS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: true };
+  const values = sheet.getRange(2, 1, lastRow - 1, COMPLETIONS_HEADERS.length).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (values[i][2] === claims.sub && values[i][4] === promptId) {
+      sheet.deleteRow(i + 2);
+      return { ok: true };
+    }
+  }
+  return { ok: true };
 }
 
 function getPromptById_(promptId) {

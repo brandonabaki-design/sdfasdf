@@ -26,6 +26,11 @@
     </a>
 
     <div class="topbar-meta">
+      <button id="assignments-btn" class="assignments-btn empty" type="button">
+        <span class="assignments-icon">📥</span>
+        <span>Assignments</span>
+        <span class="assignments-count" id="assignments-count">0</span>
+      </button>
       <span id="user-chip" class="user-chip">
         <span class="user-dot"></span>
         <span id="user-name"></span>
@@ -35,6 +40,22 @@
       <button id="sign-out" class="btn btn-ghost">Sign out</button>
     </div>
   </nav>
+
+  <!-- Assignments slide-in panel -->
+  <div id="assignments-backdrop" class="assignments-backdrop"></div>
+  <aside id="assignments-panel" class="assignments-panel" aria-hidden="true">
+    <header class="assignments-panel-header">
+      <div>
+        <h2 class="font-heading">
+          <span class="panel-icon assignments-panel-icon" aria-hidden="true">📥</span>
+          Your assignments
+        </h2>
+        <p class="panel-sub" id="assignments-panel-sub">Loading...</p>
+      </div>
+      <button class="assignments-close" id="assignments-close" aria-label="Close panel">×</button>
+    </header>
+    <div class="assignments-list" id="assignments-list"></div>
+  </aside>
 
   <main class="container">
     <section id="signin-container" class="hero">
