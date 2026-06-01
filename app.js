@@ -67,7 +67,7 @@ function renderPromptCard(p) {
         Your response
         <textarea rows="4" required placeholder="Type your response..."></textarea>
       </label>
-      <button type="submit" class="primary">Submit response</button>
+      <button type="submit" class="btn btn-primary">Submit response</button>
       <p class="result muted small" aria-live="polite"></p>
     </form>
   `;

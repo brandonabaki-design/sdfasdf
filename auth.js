@@ -21,7 +21,7 @@ function initGoogleSignIn() {
 
   google.accounts.id.renderButton(
     document.getElementById('g-signin-button'),
-    { type: 'standard', size: 'large', theme: 'outline', text: 'signin_with', shape: 'rectangular' }
+    { type: 'standard', size: 'large', theme: 'filled_black', text: 'signin_with', shape: 'pill', logo_alignment: 'left' }
   );
 }
 
@@ -51,12 +51,14 @@ function handleCredentialResponse(response) {
     sub: claims.sub,
   };
 
+  document.body.classList.add('is-signed-in');
   document.dispatchEvent(new CustomEvent('aisa:signed-in', { detail: currentUser }));
 }
 
 function signOut() {
   google.accounts.id.disableAutoSelect();
   currentUser = null;
+  document.body.classList.remove('is-signed-in');
   document.dispatchEvent(new CustomEvent('aisa:signed-out'));
 }
 

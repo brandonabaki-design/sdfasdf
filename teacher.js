@@ -70,8 +70,8 @@ function renderTeacherPromptCard(p) {
       <p class="prompt-body"></p>
       <p class="muted small">from <span class="prompt-teacher"></span> · <span class="prompt-time"></span></p>
       <div class="prompt-actions">
-        <button type="button" class="link toggle-responses">Show responses</button>
-        <button type="button" class="link summarize-btn">Generate AI summary</button>
+        <button type="button" class="link-btn toggle-responses">Show responses</button>
+        <button type="button" class="link-btn summarize-btn">Generate AI summary</button>
       </div>
     </header>
     <div class="responses-panel" hidden>
