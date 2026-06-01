@@ -140,4 +140,13 @@ form textarea { resize: vertical; }
 }
 .ai-feedback .ai-body { margin: 0; white-space: pre-wrap; }
 
+.resource-note {
+  background: #f1f5f9;
+  border-left: 3px solid #64748b;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 4px 0 10px 16px;
+}
+.resource-note .ai-body { margin: 0; white-space: pre-wrap; color: #334155; }
+
 a { color: var(--accent); }

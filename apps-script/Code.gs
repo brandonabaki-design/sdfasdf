@@ -10,13 +10,17 @@ const PROMPTS_SHEET = 'Prompts';
 const RESPONSES_SHEET = 'Responses';
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status'];
-const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model'];
+const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged'];
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const FEEDBACK_SYSTEM_PROMPT =
   "You are a supportive teacher reviewing a student's response to a class prompt. " +
   "Give brief, specific feedback (2-4 sentences). Highlight one thing they did well " +
   "and one concrete next step to improve. Speak to the student in the second person, " +
   "warmly but specifically. No lists or headings — just plain prose.";
+const DEFAULT_RESOURCE_MESSAGE =
+  "Thanks for sharing — that took courage. Your teacher has been notified and " +
+  "will follow up with you. If you need to talk to someone right now, please reach " +
+  "out to your school counsellor or a trusted adult.";
 
 function doPost(e) {
   try {
@@ -158,21 +162,38 @@ function submitResponse_(claims, promptId, body) {
     '',
     '',
     '',
+    false,
   ]);
   const rowIndex = sheet.getLastRow();
 
   let aiFeedback = '';
   let aiReviewedAt = '';
   let aiModel = '';
+  let flagged = false;
+
   try {
     const review = getGeminiFeedback_(prompt, body);
     aiFeedback = review.feedback;
     aiModel = review.model;
     const reviewedDate = new Date();
     aiReviewedAt = reviewedDate.toISOString();
-    sheet.getRange(rowIndex, 9, 1, 3).setValues([[aiFeedback, reviewedDate, aiModel]]);
+    sheet.getRange(rowIndex, 9, 1, 4).setValues([[aiFeedback, reviewedDate, aiModel, false]]);
   } catch (err) {
-    Logger.log('Gemini feedback failed: ' + err);
+    const msg = String(err);
+    Logger.log('Gemini feedback failed: ' + msg);
+    if (msg.indexOf('SAFETY') !== -1) {
+      flagged = true;
+      aiModel = 'safety_blocked';
+      aiFeedback = PropertiesService.getScriptProperties().getProperty('STUDENT_RESOURCE_MESSAGE') || DEFAULT_RESOURCE_MESSAGE;
+      const reviewedDate = new Date();
+      aiReviewedAt = reviewedDate.toISOString();
+      sheet.getRange(rowIndex, 9, 1, 4).setValues([[aiFeedback, reviewedDate, aiModel, true]]);
+      try {
+        sendDistressAlert_(prompt, claims, body);
+      } catch (mailErr) {
+        Logger.log('Failed to send distress alert: ' + mailErr);
+      }
+    }
   }
 
   return {
@@ -185,7 +206,38 @@ function submitResponse_(claims, promptId, body) {
     ai_feedback: aiFeedback,
     ai_reviewed_at: aiReviewedAt,
     ai_model: aiModel,
+    flagged,
   };
+}
+
+function sendDistressAlert_(prompt, claims, responseBody) {
+  const props = PropertiesService.getScriptProperties();
+  const teacherEmail = prompt.teacher_email;
+  const adminEmail = props.getProperty('ALERT_EMAIL') || '';
+
+  if (!teacherEmail && !adminEmail) {
+    Logger.log('No alert recipient configured');
+    return;
+  }
+
+  const sheetUrl = getSheetUrl_();
+  const subject = '[AISA Student Hub] Student response flagged for review';
+  const body =
+    'A student response triggered the AI safety filter and may need follow-up.\n\n' +
+    'Student: ' + (claims.name || '') + ' <' + claims.email + '>\n' +
+    'Prompt: ' + (prompt.title || '(untitled)') + '\n\n' +
+    'Prompt body:\n' + (prompt.body || '') + '\n\n' +
+    'Student response:\n' + responseBody + '\n\n' +
+    (sheetUrl ? 'Sheet: ' + sheetUrl + '\n\n' : '') +
+    'The student saw a neutral resource message, not AI feedback. ' +
+    'This email was sent automatically by the AISA Student Hub.';
+
+  const options = { subject: subject, body: body };
+  options.to = teacherEmail || adminEmail;
+  if (adminEmail && teacherEmail && adminEmail.toLowerCase() !== teacherEmail.toLowerCase()) {
+    options.cc = adminEmail;
+  }
+  MailApp.sendEmail(options);
 }
 
 function getGeminiFeedback_(prompt, responseBody) {
@@ -256,6 +308,7 @@ function listResponsesForStudent_(googleSub) {
       ai_feedback: r[8] || '',
       ai_reviewed_at: r[9] instanceof Date ? r[9].toISOString() : (r[9] ? String(r[9]) : ''),
       ai_model: r[10] || '',
+      flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }

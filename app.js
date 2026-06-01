@@ -106,11 +106,16 @@ function renderResponsesInCard(card, promptId) {
 
     if (r.ai_feedback) {
       const fb = document.createElement('div');
-      fb.className = 'ai-feedback';
-      fb.innerHTML = `
-        <p class="ai-label small">AI feedback</p>
-        <p class="ai-body"></p>
-      `;
+      if (r.flagged) {
+        fb.className = 'resource-note';
+        fb.innerHTML = '<p class="ai-body"></p>';
+      } else {
+        fb.className = 'ai-feedback';
+        fb.innerHTML = `
+          <p class="ai-label small">AI feedback</p>
+          <p class="ai-body"></p>
+        `;
+      }
       fb.querySelector('.ai-body').textContent = r.ai_feedback;
       container.appendChild(fb);
     }
