@@ -10,13 +10,22 @@ const PROMPTS_SHEET = 'Prompts';
 const RESPONSES_SHEET = 'Responses';
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status'];
-const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged'];
+const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason'];
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
-const FEEDBACK_SYSTEM_PROMPT =
+const REVIEW_SYSTEM_PROMPT =
   "You are a supportive teacher reviewing a student's response to a class prompt. " +
-  "Give brief, specific feedback (2-4 sentences). Highlight one thing they did well " +
-  "and one concrete next step to improve. Speak to the student in the second person, " +
-  "warmly but specifically. No lists or headings — just plain prose.";
+  "Return a single JSON object matching the provided schema with two fields:\n\n" +
+  "1. feedback: Brief 2-4 sentence feedback for the student. Highlight one thing " +
+  "they did well and one concrete next step. Speak warmly in the second person, " +
+  "plain prose, no lists or headings.\n\n" +
+  "2. distress_detected (boolean) and distress_reason (string): Carefully assess " +
+  "whether the response shows any signs of distress, self-harm, suicidal ideation, " +
+  "abuse, or safety concerns. Set distress_detected to true for any such signs — " +
+  "including subtle ones like hopelessness, expressions of worthlessness, isolation, " +
+  "or indirect references. When in doubt, prefer true so a teacher can review. " +
+  "If true, distress_reason should briefly state what you noticed in one short " +
+  "sentence. If false, distress_reason can be empty.\n\n" +
+  "The student never sees distress_reason — it is only used to alert their teacher.";
 const DEFAULT_RESOURCE_MESSAGE =
   "Thanks for sharing — that took courage. Your teacher has been notified and " +
   "will follow up with you. If you need to talk to someone right now, please reach " +
@@ -163,6 +172,7 @@ function submitResponse_(claims, promptId, body) {
     '',
     '',
     false,
+    '',
   ]);
   const rowIndex = sheet.getLastRow();
 
@@ -170,30 +180,31 @@ function submitResponse_(claims, promptId, body) {
   let aiReviewedAt = '';
   let aiModel = '';
   let flagged = false;
+  let flagReason = '';
 
   try {
-    const review = getGeminiFeedback_(prompt, body);
-    aiFeedback = review.feedback;
-    aiModel = review.model;
+    const review = getGeminiReview_(prompt, body);
     const reviewedDate = new Date();
     aiReviewedAt = reviewedDate.toISOString();
-    sheet.getRange(rowIndex, 9, 1, 4).setValues([[aiFeedback, reviewedDate, aiModel, false]]);
-  } catch (err) {
-    const msg = String(err);
-    Logger.log('Gemini feedback failed: ' + msg);
-    if (msg.indexOf('SAFETY') !== -1) {
+
+    if (review.distress_detected) {
       flagged = true;
-      aiModel = 'safety_blocked';
+      flagReason = review.distress_reason || 'Distress signals detected';
+      aiModel = review.model + ' (flagged)';
       aiFeedback = PropertiesService.getScriptProperties().getProperty('STUDENT_RESOURCE_MESSAGE') || DEFAULT_RESOURCE_MESSAGE;
-      const reviewedDate = new Date();
-      aiReviewedAt = reviewedDate.toISOString();
-      sheet.getRange(rowIndex, 9, 1, 4).setValues([[aiFeedback, reviewedDate, aiModel, true]]);
+      sheet.getRange(rowIndex, 9, 1, 5).setValues([[aiFeedback, reviewedDate, aiModel, true, flagReason]]);
       try {
-        sendDistressAlert_(prompt, claims, body);
+        sendDistressAlert_(prompt, claims, body, flagReason);
       } catch (mailErr) {
         Logger.log('Failed to send distress alert: ' + mailErr);
       }
+    } else {
+      aiFeedback = review.feedback;
+      aiModel = review.model;
+      sheet.getRange(rowIndex, 9, 1, 5).setValues([[aiFeedback, reviewedDate, aiModel, false, '']]);
     }
+  } catch (err) {
+    Logger.log('Gemini review failed: ' + err);
   }
 
   return {
@@ -210,7 +221,7 @@ function submitResponse_(claims, promptId, body) {
   };
 }
 
-function sendDistressAlert_(prompt, claims, responseBody) {
+function sendDistressAlert_(prompt, claims, responseBody, flagReason) {
   const props = PropertiesService.getScriptProperties();
   const teacherEmail = prompt.teacher_email;
   const adminEmail = props.getProperty('ALERT_EMAIL') || '';
@@ -223,13 +234,14 @@ function sendDistressAlert_(prompt, claims, responseBody) {
   const sheetUrl = getSheetUrl_();
   const subject = '[AISA Student Hub] Student response flagged for review';
   const body =
-    'A student response triggered the AI safety filter and may need follow-up.\n\n' +
+    'A student response was flagged for possible distress signals and may need follow-up.\n\n' +
     'Student: ' + (claims.name || '') + ' <' + claims.email + '>\n' +
     'Prompt: ' + (prompt.title || '(untitled)') + '\n\n' +
+    'Why flagged: ' + (flagReason || 'Detected distress signals') + '\n\n' +
     'Prompt body:\n' + (prompt.body || '') + '\n\n' +
     'Student response:\n' + responseBody + '\n\n' +
     (sheetUrl ? 'Sheet: ' + sheetUrl + '\n\n' : '') +
-    'The student saw a neutral resource message, not AI feedback. ' +
+    'The student saw a supportive resource message instead of AI feedback. ' +
     'This email was sent automatically by the AISA Student Hub.';
 
   const options = { subject: subject, body: body };
@@ -240,7 +252,7 @@ function sendDistressAlert_(prompt, claims, responseBody) {
   MailApp.sendEmail(options);
 }
 
-function getGeminiFeedback_(prompt, responseBody) {
+function getGeminiReview_(prompt, responseBody) {
   const props = PropertiesService.getScriptProperties();
   const apiKey = props.getProperty('GEMINI_API_KEY');
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
@@ -256,9 +268,22 @@ function getGeminiFeedback_(prompt, responseBody) {
               encodeURIComponent(apiKey);
 
   const requestBody = {
-    systemInstruction: { parts: [{ text: FEEDBACK_SYSTEM_PROMPT }] },
+    systemInstruction: { parts: [{ text: REVIEW_SYSTEM_PROMPT }] },
     contents: [{ role: 'user', parts: [{ text: userText }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 1024,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'object',
+        properties: {
+          feedback: { type: 'string' },
+          distress_detected: { type: 'boolean' },
+          distress_reason: { type: 'string' },
+        },
+        required: ['feedback', 'distress_detected'],
+      },
+    },
   };
 
   const res = UrlFetchApp.fetch(url, {
@@ -282,14 +307,34 @@ function getGeminiFeedback_(prompt, responseBody) {
     (candidate.content && candidate.content.parts && candidate.content.parts[0] &&
      candidate.content.parts[0].text) || '';
 
-  // STOP = normal completion. Any other reason (SAFETY, MAX_TOKENS, RECITATION...)
-  // means the output is partial or blocked — discard it rather than show garbage.
+  // If Gemini's safety filter intervened, treat that as distress detected too —
+  // the model couldn't even finish, which itself is a strong signal worth a
+  // teacher review.
   if (finishReason !== 'STOP') {
-    Logger.log('Gemini non-STOP finish: ' + finishReason + ' (partial length=' + text.length + ')');
-    throw new Error('finishReason=' + finishReason);
+    Logger.log('Gemini non-STOP finish: ' + finishReason);
+    return {
+      feedback: '',
+      distress_detected: true,
+      distress_reason: 'Gemini safety filter triggered (' + finishReason + ')',
+      model,
+    };
   }
+
   if (!text) throw new Error('Empty Gemini response');
-  return { feedback: String(text).trim(), model };
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new Error('Could not parse JSON from Gemini: ' + text.slice(0, 200));
+  }
+
+  return {
+    feedback: String(parsed.feedback || '').trim(),
+    distress_detected: !!parsed.distress_detected,
+    distress_reason: String(parsed.distress_reason || '').trim(),
+    model,
+  };
 }
 
 function listResponsesForStudent_(googleSub) {
@@ -309,6 +354,7 @@ function listResponsesForStudent_(googleSub) {
       ai_reviewed_at: r[9] instanceof Date ? r[9].toISOString() : (r[9] ? String(r[9]) : ''),
       ai_model: r[10] || '',
       flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
+      // flag_reason (r[12]) is intentionally not returned to students.
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
