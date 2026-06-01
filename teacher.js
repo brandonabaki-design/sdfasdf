@@ -1,12 +1,28 @@
-// Student page logic. Auth + api() helpers live in auth.js.
+// Teacher page logic. Auth + api() helpers live in auth.js.
 
-function showSignedIn(user) {
+async function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
   document.getElementById('signed-in').hidden = false;
   document.getElementById('user-name').textContent = user.name || '';
   document.getElementById('user-email').textContent = user.email || '';
-  loadPrompts();
+
+  const roleLoading = document.getElementById('role-loading');
+  const notTeacher = document.getElementById('not-teacher');
+  const tools = document.getElementById('teacher-tools');
+
+  try {
+    const me = await api('whoami');
+    roleLoading.hidden = true;
+    if (me.ok && me.is_teacher) {
+      tools.hidden = false;
+      loadPrompts();
+    } else {
+      notTeacher.hidden = false;
+    }
+  } catch (err) {
+    roleLoading.textContent = `Couldn't check access: ${err.message}`;
+  }
 }
 
 function showSignedOut() {
@@ -14,8 +30,10 @@ function showSignedOut() {
   document.getElementById('signin-container').hidden = false;
   document.getElementById('status').hidden = false;
   document.getElementById('status').textContent = 'Signed out. Sign in again to continue.';
-  document.getElementById('result').textContent = '';
-  document.getElementById('prompts-list').innerHTML = '';
+  document.getElementById('teacher-tools').hidden = true;
+  document.getElementById('not-teacher').hidden = true;
+  document.getElementById('role-loading').hidden = false;
+  document.getElementById('role-loading').textContent = 'Checking access...';
 }
 
 async function loadPrompts() {
@@ -28,7 +46,7 @@ async function loadPrompts() {
       return;
     }
     if (data.prompts.length === 0) {
-      list.innerHTML = '<p class="muted">No active prompts yet. Check back later.</p>';
+      list.innerHTML = '<p class="muted">No active prompts yet.</p>';
       return;
     }
     list.innerHTML = '';
@@ -52,27 +70,38 @@ async function loadPrompts() {
   }
 }
 
-async function logImHere() {
-  const btn = document.getElementById('im-here');
+async function submitPrompt(event) {
+  event.preventDefault();
+  const titleEl = document.getElementById('prompt-title');
+  const bodyEl = document.getElementById('prompt-body');
   const result = document.getElementById('result');
-  btn.disabled = true;
-  result.textContent = 'Logging...';
+  const submitBtn = event.target.querySelector('button[type="submit"]');
+
+  submitBtn.disabled = true;
+  result.textContent = 'Publishing...';
+
   try {
-    const data = await api('im_here', { clientTimestamp: new Date().toISOString() });
+    const data = await api('create_prompt', {
+      title: titleEl.value.trim(),
+      body: bodyEl.value.trim(),
+    });
     if (data.ok) {
-      result.textContent = `Logged at ${new Date(data.timestamp).toLocaleTimeString()}.`;
+      result.textContent = 'Published.';
+      titleEl.value = '';
+      bodyEl.value = '';
+      loadPrompts();
     } else {
       result.textContent = `Error: ${data.error || 'unknown'}`;
     }
   } catch (err) {
     result.textContent = `Network error: ${err.message}`;
   } finally {
-    btn.disabled = false;
+    submitBtn.disabled = false;
   }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('im-here').addEventListener('click', logImHere);
+  document.getElementById('prompt-form').addEventListener('submit', submitPrompt);
   document.getElementById('sign-out').addEventListener('click', signOut);
 });
 

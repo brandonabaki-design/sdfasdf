@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AISA Student Hub — Teacher</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>AISA Student Hub <span class="tag">teacher</span></h1>
+    <p id="status">Sign in with your <strong>aisa.sch.ae</strong> teacher account to continue.</p>
+
+    <div id="signin-container">
+      <div id="g-signin-button"></div>
+    </div>
+
+    <section id="signed-in" hidden>
+      <p>
+        Signed in as <span id="user-name"></span>
+        <span class="muted">(<span id="user-email"></span>)</span>
+      </p>
+
+      <section id="role-loading" class="muted">Checking access...</section>
+
+      <section id="not-teacher" hidden>
+        <p>Your account isn't on the teacher allow-list.</p>
+        <p class="muted small">
+          Ask an admin to add your email to the <code>TEACHER_EMAILS</code>
+          script property in the Apps Script project.
+        </p>
+      </section>
+
+      <section id="teacher-tools" hidden>
+        <h2>Create a prompt</h2>
+        <form id="prompt-form">
+          <label>
+            Title
+            <input id="prompt-title" type="text" maxlength="120" required
+                   placeholder="e.g. Reflection on yesterday's lesson" />
+          </label>
+          <label>
+            Prompt body
+            <textarea id="prompt-body" rows="6" required
+                      placeholder="What would you like the students to work on?"></textarea>
+          </label>
+          <button type="submit" class="primary">Publish prompt</button>
+          <p id="result" aria-live="polite"></p>
+        </form>
+
+        <h2>Active prompts</h2>
+        <div id="prompts-list" class="muted">Loading...</div>
+      </section>
+
+      <button id="sign-out" class="link">Sign out</button>
+    </section>
+
+    <footer>
+      <p class="muted small">
+        <a href="index.html">Student view</a>
+      </p>
+    </footer>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="teacher.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
+</body>
+</html>

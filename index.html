@@ -20,19 +20,29 @@
         Hi <span id="user-name"></span>
         <span class="muted">(<span id="user-email"></span>)</span>
       </p>
-      <button id="im-here" class="primary">I'm here</button>
-      <p id="result" aria-live="polite"></p>
+
+      <section>
+        <button id="im-here" class="primary">I'm here</button>
+        <p id="result" aria-live="polite"></p>
+      </section>
+
+      <section>
+        <h2>Your prompts</h2>
+        <div id="prompts-list" class="muted">Loading...</div>
+      </section>
+
       <button id="sign-out" class="link">Sign out</button>
     </section>
 
     <footer>
       <p class="muted small">
-        Data logged: your aisa.sch.ae email, name, action, and timestamp.
+        <a href="teacher.html">Teacher view</a>
       </p>
     </footer>
   </main>
 
   <script src="config.js"></script>
+  <script src="auth.js"></script>
   <script src="app.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
 </body>
