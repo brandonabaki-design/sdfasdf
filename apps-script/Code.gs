@@ -10,7 +10,7 @@ const PROMPTS_SHEET = 'Prompts';
 const RESPONSES_SHEET = 'Responses';
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status'];
-const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason'];
+const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason', 'resolved'];
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const REVIEW_SYSTEM_PROMPT =
   "You are a supportive teacher reviewing a student's response to a class prompt. " +
@@ -102,6 +102,22 @@ function doPost(e) {
       case 'summarize_prompt_responses':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, summary: summarizePromptResponses_(payload.prompt_id || '') });
+
+      case 'list_flagged_responses':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, responses: listFlaggedResponses_(payload.include_resolved === true) });
+
+      case 'resolve_flagged_response':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_(resolveFlaggedResponse_(payload.response_id || ''));
+
+      case 'list_students_for_prompt':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, students: listStudentsForPrompt_(payload.prompt_id || '') });
+
+      case 'get_student_thread':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, thread: getStudentThread_(payload.prompt_id || '', payload.google_sub || '', payload.student_email || '') });
 
       case 'submit_response':
         return jsonOut_({
@@ -215,6 +231,7 @@ function submitResponse_(claims, promptId, body) {
     '',
     false,
     '',
+    false,
   ]);
   const rowIndex = sheet.getLastRow();
 
@@ -467,6 +484,105 @@ function summarizePromptResponses_(promptId) {
       : [],
     next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.map(String) : [],
   };
+}
+
+function listFlaggedResponses_(includeResolved) {
+  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
+  return values
+    .filter(r => (r[11] === true || String(r[11]).toLowerCase() === 'true'))
+    .filter(r => includeResolved || !(r[13] === true || String(r[13]).toLowerCase() === 'true'))
+    .map(r => ({
+      id: r[0],
+      created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+      student_email: r[2],
+      student_name: r[3],
+      prompt_id: r[5],
+      prompt_title: r[6],
+      body: r[7],
+      flag_reason: r[12] || '',
+      resolved: r[13] === true || String(r[13]).toLowerCase() === 'true',
+    }))
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
+function resolveFlaggedResponse_(responseId) {
+  if (!responseId) return { ok: false, error: 'response_id required' };
+  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: false, error: 'no responses' };
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0] === responseId) {
+      sheet.getRange(i + 2, 14).setValue(true);
+      return { ok: true, response_id: responseId };
+    }
+  }
+  return { ok: false, error: 'not found' };
+}
+
+function listStudentsForPrompt_(promptId) {
+  if (!promptId) return [];
+  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
+  const byStudent = {};
+  for (const r of values) {
+    if (r[5] !== promptId) continue;
+    const sub = r[4] || r[2];
+    if (!byStudent[sub]) {
+      byStudent[sub] = {
+        google_sub: r[4],
+        student_email: r[2],
+        student_name: r[3],
+        response_count: 0,
+        last_at: '',
+        flagged: false,
+      };
+    }
+    byStudent[sub].response_count++;
+    const createdAt = r[1] instanceof Date ? r[1].toISOString() : String(r[1]);
+    if (createdAt > byStudent[sub].last_at) byStudent[sub].last_at = createdAt;
+    if (r[11] === true || String(r[11]).toLowerCase() === 'true') byStudent[sub].flagged = true;
+  }
+  return Object.values(byStudent).sort((a, b) => {
+    if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
+    return a.last_at < b.last_at ? 1 : -1;
+  });
+}
+
+function getStudentThread_(promptId, googleSub, studentEmail) {
+  if (!promptId || (!googleSub && !studentEmail)) return { prompt: null, responses: [] };
+  const prompt = getPromptById_(promptId);
+  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { prompt: prompt, responses: [] };
+  const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
+  const subMatch = googleSub ? String(googleSub) : '';
+  const emailMatch = studentEmail ? String(studentEmail).toLowerCase() : '';
+  const responses = values
+    .filter(r => r[5] === promptId && (
+      (subMatch && r[4] === subMatch) ||
+      (emailMatch && String(r[2] || '').toLowerCase() === emailMatch)
+    ))
+    .map(r => ({
+      id: r[0],
+      created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+      student_email: r[2],
+      student_name: r[3],
+      body: r[7],
+      ai_feedback: r[8] || '',
+      ai_reviewed_at: r[9] instanceof Date ? r[9].toISOString() : (r[9] ? String(r[9]) : ''),
+      ai_model: r[10] || '',
+      flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
+      flag_reason: r[12] || '',
+      resolved: r[13] === true || String(r[13]).toLowerCase() === 'true',
+    }))
+    .sort((a, b) => (a.created_at > b.created_at ? 1 : -1));
+  return { prompt: prompt, responses: responses };
 }
 
 function listResponsesForPrompt_(promptId) {

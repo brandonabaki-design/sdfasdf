@@ -6,27 +6,23 @@
   <title>AISA Student Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="bg-gradient"></div>
-  <div class="bg-grid"></div>
+  <div class="bg-blobs" aria-hidden="true">
+    <div class="bg-blob b1"></div>
+    <div class="bg-blob b2"></div>
+    <div class="bg-blob b3"></div>
+  </div>
 
   <nav class="topbar">
     <a href="index.html" class="brand">
-      <svg class="brand-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <linearGradient id="brand-grad-i" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#4f46e5" />
-            <stop offset="50%" stop-color="#a78bfa" />
-            <stop offset="100%" stop-color="#22d3ee" />
-          </linearGradient>
-        </defs>
-        <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#brand-grad-i)" />
-        <path d="M16 9 L23.5 23 L20.4 23 L18.7 19.4 L13.3 19.4 L11.6 23 L8.5 23 Z M14.3 16.8 L17.7 16.8 L16 13.2 Z" fill="white" />
-      </svg>
-      <span class="brand-text">AISA <strong>Hub</strong></span>
+      <span class="brand-mark" aria-hidden="true">🦁</span>
+      <span class="brand-text">
+        <span class="brand-name">AISA</span>
+        <span class="brand-sub">Student Hub</span>
+      </span>
     </a>
 
     <div class="topbar-meta">
@@ -43,12 +39,13 @@
   <main class="container">
     <section id="signin-container" class="hero">
       <div class="hero-content">
-        <h1 class="hero-title">
-          <span class="gradient-text">AISA Student Hub</span>
+        <h1 class="hero-title font-heading">
+          Welcome to the<br />
+          <span class="gradient-amber">AISA Student Hub</span>
         </h1>
         <p class="hero-subtitle">
-          A unified workspace where teachers design, students respond, and AI provides
-          instant feedback — every interaction tracked for personalised growth.
+          A unified workspace where teachers design, students respond, and AI
+          provides instant feedback — every interaction tracked for personalised growth.
         </p>
         <p id="status" class="hero-status">
           Sign in with your <strong>aisa.sch.ae</strong> account to continue.
@@ -59,19 +56,19 @@
 
         <div class="hero-features">
           <div class="hero-feature">
-            <div class="hero-feature-icon">1</div>
-            <h3>Teachers design</h3>
-            <p>Publish prompts, activities, and reflection questions to your class in seconds.</p>
+            <div class="hero-feature-icon">📝</div>
+            <h3 class="font-heading">Teachers design</h3>
+            <p>Publish prompts and activities to your class in seconds.</p>
           </div>
           <div class="hero-feature">
-            <div class="hero-feature-icon">2</div>
-            <h3>Students respond</h3>
-            <p>Sign in with school accounts. Every submission is captured and timestamped.</p>
+            <div class="hero-feature-icon">✍️</div>
+            <h3 class="font-heading">Students respond</h3>
+            <p>Every submission is captured against the student's school account.</p>
           </div>
           <div class="hero-feature">
-            <div class="hero-feature-icon">3</div>
-            <h3>AI reviews</h3>
-            <p>Instant per-response feedback plus class-wide summaries for the teacher.</p>
+            <div class="hero-feature-icon">✨</div>
+            <h3 class="font-heading">AI reviews</h3>
+            <p>Instant per-response feedback plus class-wide summaries.</p>
           </div>
         </div>
       </div>
@@ -80,10 +77,10 @@
     <section id="signed-in" hidden>
       <header class="page-header">
         <div>
-          <h2 class="page-title">Today's prompts</h2>
+          <h2 class="page-title font-heading">Today's prompts</h2>
           <p class="page-subtitle">Respond to your teachers and get instant AI feedback.</p>
         </div>
-        <button id="im-here" class="btn btn-primary">I'm here</button>
+        <button id="im-here" class="btn btn-amber">I'm here</button>
       </header>
       <p id="result" class="status-line" aria-live="polite"></p>
 
