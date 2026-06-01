@@ -105,8 +105,68 @@
       </header>
       <p id="result" class="status-line" aria-live="polite"></p>
 
+      <!-- Check out / check in card -->
+      <section id="checkout-card" class="checkout-card">
+        <div id="checkout-idle" class="checkout-idle">
+          <div class="checkout-header">
+            <h3 class="font-heading">Need to step out?</h3>
+            <p class="muted small">Tap a destination — we'll notify your teacher by email and time your trip.</p>
+          </div>
+          <div class="checkout-options">
+            <button class="checkout-option" data-destination="Bathroom" type="button">
+              <span class="checkout-emoji" aria-hidden="true">🚻</span>
+              <span class="checkout-label">Bathroom</span>
+            </button>
+            <button class="checkout-option" data-destination="Nurse" type="button">
+              <span class="checkout-emoji" aria-hidden="true">⚕️</span>
+              <span class="checkout-label">Nurse</span>
+            </button>
+            <button class="checkout-option" data-destination="Counsellor" type="button">
+              <span class="checkout-emoji" aria-hidden="true">💬</span>
+              <span class="checkout-label">Counsellor</span>
+            </button>
+          </div>
+        </div>
+        <div id="checkout-active" class="checkout-active" hidden>
+          <div class="checkout-active-info">
+            <p class="checkout-active-label small">Currently checked out</p>
+            <h3 class="font-heading">At <span id="checkout-destination-active"></span></h3>
+            <p class="muted small">Notified <span id="checkout-teacher-active"></span> · <span id="checkout-since"></span></p>
+          </div>
+          <button id="checkin-btn" class="btn btn-amber" type="button">Check back in</button>
+        </div>
+      </section>
+
       <div id="prompts-list" class="prompts-grid"></div>
     </section>
+
+    <!-- Check-out modal -->
+    <div id="checkout-modal-backdrop" class="modal-backdrop" hidden></div>
+    <div id="checkout-modal" class="modal" hidden role="dialog" aria-labelledby="checkout-modal-title">
+      <header class="modal-header">
+        <h2 id="checkout-modal-title" class="font-heading">
+          <span class="panel-icon checkout-modal-icon" aria-hidden="true">🚪</span>
+          <span id="checkout-modal-heading">Check out</span>
+        </h2>
+        <button class="modal-close" id="checkout-modal-close" aria-label="Close">×</button>
+      </header>
+      <div class="modal-body">
+        <p class="muted small">You're heading to <strong id="checkout-modal-destination"></strong>. Your teacher gets an email now and another when you check back in.</p>
+        <label>
+          Notify which teacher?
+          <select id="checkout-teacher-select"></select>
+        </label>
+        <label>
+          Notes <span class="field-hint">optional</span>
+          <input id="checkout-notes" type="text" maxlength="140" placeholder="e.g. feeling unwell, won't be long" />
+        </label>
+        <p id="checkout-modal-result" class="status-line" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="checkout-modal-cancel" type="button">Cancel</button>
+          <button class="btn btn-primary" id="checkout-modal-submit" type="button">Send & check out</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <footer class="page-footer">

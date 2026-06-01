@@ -933,6 +933,141 @@ body:not(.is-signed-in) #assignments-btn { display: none !important; }
 }
 
 /* ============================================================
+   Check out / check in card
+   ============================================================ */
+
+.checkout-card {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.10), rgba(99, 102, 241, 0.08));
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 18px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.checkout-header h3 {
+  font-family: var(--font-heading);
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.checkout-header p { margin: 0 0 16px; }
+
+.checkout-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.checkout-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.checkout-option:hover {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.45);
+  transform: translateY(-2px);
+}
+.checkout-emoji {
+  font-size: 26px;
+  line-height: 1;
+}
+.checkout-label {
+  font-size: 13px;
+}
+
+/* Active state (currently checked out): outer card switches to amber via JS class */
+.checkout-card.is-active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.06));
+  border-color: rgba(251, 191, 36, 0.40);
+}
+.checkout-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.checkout-active-info { flex: 1; min-width: 200px; }
+.checkout-active-label {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  color: var(--amber-bright);
+  margin: 0 0 4px;
+  font-size: 10px;
+}
+.checkout-active h3 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+}
+.checkout-active h3 span { color: var(--amber-bright); }
+.checkout-active .muted { margin: 4px 0 0; font-family: var(--font-mono); font-size: 12px; }
+
+.checkout-modal-icon {
+  background: linear-gradient(135deg, var(--cyan), var(--indigo));
+  box-shadow: 0 6px 16px -6px rgba(34, 211, 238, 0.5);
+}
+
+.modal-body select {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-mono);
+  color-scheme: dark;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M2 4l4 4 4-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 10px;
+  padding-right: 32px;
+}
+.modal-body select:focus {
+  outline: none;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--indigo-bright);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+}
+.modal-body input[type="text"] {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.modal-body input[type="text"]:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--indigo-bright);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+}
+
+/* ============================================================
    Prompt cards
    ============================================================ */
 
@@ -1781,4 +1916,8 @@ body:not(.is-signed-in) #assignments-btn { display: none !important; }
   .draft-banner { flex-direction: column; align-items: flex-start; gap: 6px; }
   .student-row { grid-template-columns: 36px 1fr; }
   .student-row .student-meta { grid-column: 1 / -1; align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+  .checkout-card { padding: 18px; }
+  .checkout-options { gap: 8px; }
+  .checkout-option { padding: 14px 8px; font-size: 13px; }
+  .checkout-emoji { font-size: 22px; }
 }

@@ -10,6 +10,8 @@ const PROMPTS_SHEET = 'Prompts';
 const RESPONSES_SHEET = 'Responses';
 const COMPLETIONS_SHEET = 'Completions';
 const COMPLETIONS_HEADERS = ['id', 'completed_at', 'google_sub', 'student_email', 'prompt_id'];
+const CHECKOUTS_SHEET = 'CheckOuts';
+const CHECKOUTS_HEADERS = ['id', 'student_email', 'student_name', 'google_sub', 'destination', 'teacher_email', 'notes', 'checked_out_at', 'checked_in_at', 'status'];
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status', 'closes_at', 'audience', 'shared_from'];
 const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason', 'resolved'];
@@ -154,6 +156,22 @@ function doPost(e) {
 
       case 'im_here':
         return jsonOut_(logEvent_(claims, 'im_here', payload.clientTimestamp || ''));
+
+      case 'list_teachers':
+        return jsonOut_({ ok: true, teachers: getTeacherList_() });
+
+      case 'check_out':
+        return jsonOut_(checkOut_(claims, payload));
+
+      case 'check_in':
+        return jsonOut_(checkIn_(claims, payload.checkout_id || ''));
+
+      case 'get_active_checkout':
+        return jsonOut_({ ok: true, checkout: getActiveCheckout_(claims.sub) });
+
+      case 'list_active_checkouts':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, checkouts: listActiveCheckouts_() });
 
       default:
         return jsonOut_({ ok: false, error: 'unknown action: ' + action });
@@ -914,6 +932,166 @@ function ensureHeaders_(sheet, expectedHeaders) {
 function getSheetUrl_() {
   const sheetId = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
   return sheetId ? 'https://docs.google.com/spreadsheets/d/' + sheetId : null;
+}
+
+function getTeacherList_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('TEACHER_EMAILS') || '';
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function checkOut_(claims, payload) {
+  const destination = String(payload.destination || '').trim();
+  const teacherEmail = String(payload.teacher_email || '').trim().toLowerCase();
+  const notes = String(payload.notes || '').trim();
+
+  if (!destination) return { ok: false, error: 'destination required' };
+  if (!teacherEmail) return { ok: false, error: 'teacher_email required' };
+  if (!teacherEmail.endsWith('@' + ALLOWED_HD)) return { ok: false, error: 'teacher must be an @' + ALLOWED_HD + ' address' };
+  if (!isTeacher_(teacherEmail)) return { ok: false, error: 'selected teacher is not on the allow-list' };
+
+  const active = getActiveCheckout_(claims.sub);
+  if (active) return { ok: false, error: 'already checked out for ' + active.destination + '. Check in first.' };
+
+  const sheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const id = Utilities.getUuid();
+  const checkedOutAt = new Date();
+  sheet.appendRow([
+    id,
+    claims.email,
+    claims.name || '',
+    claims.sub,
+    destination,
+    teacherEmail,
+    notes,
+    checkedOutAt,
+    '',
+    'out',
+  ]);
+
+  try {
+    sendCheckoutEmail_(claims, destination, teacherEmail, notes, 'out');
+  } catch (err) {
+    Logger.log('Failed to send checkout email: ' + err);
+  }
+
+  return {
+    ok: true,
+    checkout: {
+      id,
+      destination,
+      teacher_email: teacherEmail,
+      notes,
+      checked_out_at: checkedOutAt.toISOString(),
+      status: 'out',
+    },
+  };
+}
+
+function checkIn_(claims, checkoutId) {
+  if (!checkoutId) return { ok: false, error: 'checkout_id required' };
+  const sheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: false, error: 'no checkouts' };
+  const values = sheet.getRange(2, 1, lastRow - 1, CHECKOUTS_HEADERS.length).getValues();
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
+    if (r[0] === checkoutId && r[3] === claims.sub && String(r[9]).toLowerCase() === 'out') {
+      const rowIndex = i + 2;
+      const checkedInAt = new Date();
+      sheet.getRange(rowIndex, 9, 1, 2).setValues([[checkedInAt, 'in']]);
+
+      const destination = r[4];
+      const teacherEmail = r[5];
+      const notes = r[6];
+      const checkedOutAt = r[7] instanceof Date ? r[7] : new Date(r[7]);
+      const durationMinutes = Math.max(0, Math.round((checkedInAt - checkedOutAt) / 60000));
+
+      try {
+        sendCheckoutEmail_(claims, destination, teacherEmail, notes, 'in', durationMinutes);
+      } catch (err) {
+        Logger.log('Failed to send checkin email: ' + err);
+      }
+
+      return {
+        ok: true,
+        checkout: {
+          id: r[0],
+          destination,
+          teacher_email: teacherEmail,
+          checked_out_at: checkedOutAt.toISOString(),
+          checked_in_at: checkedInAt.toISOString(),
+          duration_minutes: durationMinutes,
+          status: 'in',
+        },
+      };
+    }
+  }
+  return { ok: false, error: 'active checkout not found' };
+}
+
+function getActiveCheckout_(googleSub) {
+  if (!googleSub) return null;
+  const sheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const values = sheet.getRange(2, 1, lastRow - 1, CHECKOUTS_HEADERS.length).getValues();
+  for (const r of values) {
+    if (r[3] === googleSub && String(r[9]).toLowerCase() === 'out') {
+      return {
+        id: r[0],
+        destination: r[4],
+        teacher_email: r[5],
+        notes: r[6],
+        checked_out_at: r[7] instanceof Date ? r[7].toISOString() : String(r[7]),
+        status: 'out',
+      };
+    }
+  }
+  return null;
+}
+
+function listActiveCheckouts_() {
+  const sheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, CHECKOUTS_HEADERS.length).getValues();
+  return values
+    .filter(r => String(r[9]).toLowerCase() === 'out')
+    .map(r => ({
+      id: r[0],
+      student_email: r[1],
+      student_name: r[2],
+      destination: r[4],
+      teacher_email: r[5],
+      notes: r[6],
+      checked_out_at: r[7] instanceof Date ? r[7].toISOString() : String(r[7]),
+    }))
+    .sort((a, b) => (a.checked_out_at < b.checked_out_at ? 1 : -1));
+}
+
+function sendCheckoutEmail_(claims, destination, teacherEmail, notes, mode, durationMinutes) {
+  const studentLabel = (claims.name || claims.email) + ' <' + claims.email + '>';
+  let subject, body;
+  if (mode === 'out') {
+    subject = '[AISA Hub] ' + (claims.name || claims.email) + ' has stepped out — ' + destination;
+    body =
+      'Student check-OUT notification\n\n' +
+      'Student: ' + studentLabel + '\n' +
+      'Destination: ' + destination + '\n' +
+      'Time: ' + new Date().toLocaleString() + '\n' +
+      (notes ? 'Notes: ' + notes + '\n' : '') +
+      '\nThey will check back in when they return. Sent automatically by the AISA Student Hub.';
+  } else {
+    subject = '[AISA Hub] ' + (claims.name || claims.email) + ' has returned from ' + destination;
+    body =
+      'Student check-IN notification\n\n' +
+      'Student: ' + studentLabel + '\n' +
+      'Returned from: ' + destination + '\n' +
+      'Time away: ' + durationMinutes + ' minute' + (durationMinutes === 1 ? '' : 's') + '\n' +
+      'Returned at: ' + new Date().toLocaleString() + '\n' +
+      '\nSent automatically by the AISA Student Hub.';
+  }
+  MailApp.sendEmail({ to: teacherEmail, subject: subject, body: body });
 }
 
 function jsonOut_(obj) {

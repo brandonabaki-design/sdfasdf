@@ -10,6 +10,8 @@ function showSignedIn(user) {
   document.getElementById('user-name').textContent = user.name || '';
   document.getElementById('user-email').textContent = user.email || '';
   loadPrompts();
+  loadTeachers();
+  refreshCheckoutState();
 }
 
 function showSignedOut() {
@@ -21,8 +23,13 @@ function showSignedOut() {
   document.getElementById('prompts-list').innerHTML = '';
   allResponses = [];
   allPrompts = [];
+  activeCheckout = null;
+  if (checkoutTimerId) { clearInterval(checkoutTimerId); checkoutTimerId = null; }
   updateAssignmentsBadge([]);
   closeAssignmentsPanel();
+  closeCheckoutModal();
+  const card = document.getElementById('checkout-card');
+  if (card) card.classList.remove('is-active');
 }
 
 async function loadPrompts() {
@@ -379,14 +386,178 @@ function closeAssignmentsPanel() {
   }
 }
 
+/* ============================================================
+   Check out / check in
+   ============================================================ */
+
+let teacherList = [];
+let activeCheckout = null;
+let checkoutPendingDestination = null;
+let checkoutTimerId = null;
+
+async function loadTeachers() {
+  try {
+    const data = await api('list_teachers');
+    if (data.ok) teacherList = data.teachers || [];
+  } catch (err) { /* silent */ }
+}
+
+async function refreshCheckoutState() {
+  try {
+    const data = await api('get_active_checkout');
+    if (data.ok) {
+      activeCheckout = data.checkout;
+      renderCheckoutState();
+    }
+  } catch (err) { /* silent */ }
+}
+
+function renderCheckoutState() {
+  const card = document.getElementById('checkout-card');
+  const idle = document.getElementById('checkout-idle');
+  const active = document.getElementById('checkout-active');
+  if (!idle || !active || !card) return;
+  if (activeCheckout) {
+    card.classList.add('is-active');
+    idle.hidden = true;
+    active.hidden = false;
+    document.getElementById('checkout-destination-active').textContent = activeCheckout.destination;
+    document.getElementById('checkout-teacher-active').textContent = activeCheckout.teacher_email;
+    updateSinceTimer();
+    if (checkoutTimerId) clearInterval(checkoutTimerId);
+    checkoutTimerId = setInterval(updateSinceTimer, 30000);
+  } else {
+    card.classList.remove('is-active');
+    idle.hidden = false;
+    active.hidden = true;
+    if (checkoutTimerId) {
+      clearInterval(checkoutTimerId);
+      checkoutTimerId = null;
+    }
+  }
+}
+
+function updateSinceTimer() {
+  if (!activeCheckout) return;
+  const el = document.getElementById('checkout-since');
+  if (!el) return;
+  const start = new Date(activeCheckout.checked_out_at);
+  const mins = Math.max(0, Math.round((Date.now() - start.getTime()) / 60000));
+  el.textContent = mins === 0 ? 'just now' : `${mins} min${mins === 1 ? '' : 's'} ago`;
+}
+
+function openCheckoutModal(destination) {
+  if (activeCheckout) return;
+  checkoutPendingDestination = destination;
+  document.getElementById('checkout-modal-heading').textContent = `Check out — ${destination}`;
+  document.getElementById('checkout-modal-destination').textContent = destination;
+
+  const select = document.getElementById('checkout-teacher-select');
+  select.innerHTML = '';
+  if (teacherList.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No teachers configured';
+    opt.disabled = true;
+    select.appendChild(opt);
+  } else {
+    for (const email of teacherList) {
+      const opt = document.createElement('option');
+      opt.value = email;
+      opt.textContent = email;
+      select.appendChild(opt);
+    }
+  }
+  document.getElementById('checkout-notes').value = '';
+  document.getElementById('checkout-modal-result').textContent = '';
+
+  document.getElementById('checkout-modal-backdrop').hidden = false;
+  document.getElementById('checkout-modal').hidden = false;
+  setTimeout(() => select.focus(), 50);
+}
+
+function closeCheckoutModal() {
+  checkoutPendingDestination = null;
+  document.getElementById('checkout-modal-backdrop').hidden = true;
+  document.getElementById('checkout-modal').hidden = true;
+}
+
+async function submitCheckout() {
+  if (!checkoutPendingDestination) return;
+  const teacherEmail = document.getElementById('checkout-teacher-select').value;
+  const notes = document.getElementById('checkout-notes').value.trim();
+  const result = document.getElementById('checkout-modal-result');
+  const btn = document.getElementById('checkout-modal-submit');
+
+  if (!teacherEmail) {
+    result.textContent = 'Choose a teacher.';
+    return;
+  }
+  btn.disabled = true;
+  result.textContent = 'Notifying teacher...';
+  try {
+    const data = await api('check_out', {
+      destination: checkoutPendingDestination,
+      teacher_email: teacherEmail,
+      notes: notes,
+    });
+    if (data.ok) {
+      activeCheckout = data.checkout;
+      renderCheckoutState();
+      closeCheckoutModal();
+    } else {
+      result.textContent = `Error: ${data.error || 'unknown'}`;
+    }
+  } catch (err) {
+    result.textContent = `Network error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function submitCheckIn() {
+  if (!activeCheckout) return;
+  const btn = document.getElementById('checkin-btn');
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Checking in...';
+  try {
+    const data = await api('check_in', { checkout_id: activeCheckout.id });
+    if (data.ok) {
+      activeCheckout = null;
+      renderCheckoutState();
+    } else {
+      alert('Error: ' + (data.error || 'unknown'));
+    }
+  } catch (err) {
+    alert('Network error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('im-here').addEventListener('click', logImHere);
   document.getElementById('sign-out').addEventListener('click', signOut);
   document.getElementById('assignments-btn').addEventListener('click', openAssignmentsPanel);
   document.getElementById('assignments-close').addEventListener('click', closeAssignmentsPanel);
   document.getElementById('assignments-backdrop').addEventListener('click', closeAssignmentsPanel);
+
+  document.querySelectorAll('.checkout-option').forEach(btn => {
+    btn.addEventListener('click', () => openCheckoutModal(btn.dataset.destination));
+  });
+  document.getElementById('checkin-btn').addEventListener('click', submitCheckIn);
+  document.getElementById('checkout-modal-close').addEventListener('click', closeCheckoutModal);
+  document.getElementById('checkout-modal-cancel').addEventListener('click', closeCheckoutModal);
+  document.getElementById('checkout-modal-backdrop').addEventListener('click', closeCheckoutModal);
+  document.getElementById('checkout-modal-submit').addEventListener('click', submitCheckout);
+
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeAssignmentsPanel();
+    if (e.key === 'Escape') {
+      closeAssignmentsPanel();
+      closeCheckoutModal();
+    }
   });
 });
 
