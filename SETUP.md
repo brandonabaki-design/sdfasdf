@@ -145,6 +145,25 @@ The Apps Script auto-creates two tabs in *AISA Student Hub - Events*:
 | flagged          | `TRUE` if Gemini's classifier or safety filter flagged distress |
 | flag_reason      | brief explanation from the classifier (teacher-only) |
 
+## Optional: time-driven trigger for overdue check-outs
+
+The teacher's "Out now" panel automatically fires an overdue-warning
+email to the notified teacher whenever a student has been checked out
+longer than `OVERDUE_THRESHOLD_MINUTES` (default 10). The check runs
+whenever any teacher opens or refreshes that panel.
+
+For coverage when no teacher has the page open, set up a time-driven
+trigger:
+
+1. Apps Script editor → **Triggers** (clock icon, left sidebar).
+2. **Add trigger**.
+3. Function: `runOverdueCheck`. Deployment: Head. Event source: Time-driven.
+   Type: Minutes timer. Every 5 minutes.
+4. Save and authorize.
+
+Optional script property `OVERDUE_THRESHOLD_MINUTES` overrides the
+10-minute default if you want a tighter or looser cutoff.
+
 ## Re-deploying after backend changes
 
 When `apps-script/Code.gs` changes, re-deploy as a new **version** of the

@@ -11,7 +11,8 @@ const RESPONSES_SHEET = 'Responses';
 const COMPLETIONS_SHEET = 'Completions';
 const COMPLETIONS_HEADERS = ['id', 'completed_at', 'google_sub', 'student_email', 'prompt_id'];
 const CHECKOUTS_SHEET = 'CheckOuts';
-const CHECKOUTS_HEADERS = ['id', 'student_email', 'student_name', 'google_sub', 'destination', 'teacher_email', 'notes', 'checked_out_at', 'checked_in_at', 'status'];
+const CHECKOUTS_HEADERS = ['id', 'student_email', 'student_name', 'google_sub', 'destination', 'teacher_email', 'notes', 'checked_out_at', 'checked_in_at', 'status', 'warning_sent'];
+const DEFAULT_OVERDUE_MINUTES = 10;
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status', 'closes_at', 'audience', 'shared_from'];
 const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason', 'resolved'];
@@ -966,6 +967,7 @@ function checkOut_(claims, payload) {
     checkedOutAt,
     '',
     'out',
+    false,
   ]);
 
   try {
@@ -1051,22 +1053,94 @@ function getActiveCheckout_(googleSub) {
 }
 
 function listActiveCheckouts_() {
+  // Send overdue warnings on every fetch so teachers see fresh state.
+  try { checkOverdueCheckouts_(); } catch (err) { Logger.log('overdue scan failed: ' + err); }
+
   const sheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   const values = sheet.getRange(2, 1, lastRow - 1, CHECKOUTS_HEADERS.length).getValues();
+  const overdueAfter = getOverdueThresholdMinutes_();
+  const now = Date.now();
   return values
     .filter(r => String(r[9]).toLowerCase() === 'out')
-    .map(r => ({
-      id: r[0],
-      student_email: r[1],
-      student_name: r[2],
-      destination: r[4],
-      teacher_email: r[5],
-      notes: r[6],
-      checked_out_at: r[7] instanceof Date ? r[7].toISOString() : String(r[7]),
-    }))
+    .map(r => {
+      const checkedOutAt = r[7] instanceof Date ? r[7] : new Date(r[7]);
+      const minutesAway = Math.max(0, Math.round((now - checkedOutAt.getTime()) / 60000));
+      return {
+        id: r[0],
+        student_email: r[1],
+        student_name: r[2],
+        destination: r[4],
+        teacher_email: r[5],
+        notes: r[6],
+        checked_out_at: checkedOutAt.toISOString(),
+        minutes_away: minutesAway,
+        overdue: minutesAway >= overdueAfter,
+        warning_sent: r[10] === true || String(r[10]).toLowerCase() === 'true',
+      };
+    })
     .sort((a, b) => (a.checked_out_at < b.checked_out_at ? 1 : -1));
+}
+
+function getOverdueThresholdMinutes_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('OVERDUE_THRESHOLD_MINUTES');
+  const parsed = parseInt(raw, 10);
+  return (parsed && parsed > 0) ? parsed : DEFAULT_OVERDUE_MINUTES;
+}
+
+function checkOverdueCheckouts_() {
+  const sheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+  const thresholdMs = getOverdueThresholdMinutes_() * 60 * 1000;
+  const now = new Date();
+  const values = sheet.getRange(2, 1, lastRow - 1, CHECKOUTS_HEADERS.length).getValues();
+  let sent = 0;
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
+    if (String(r[9]).toLowerCase() !== 'out') continue;
+    const warningSent = r[10] === true || String(r[10]).toLowerCase() === 'true';
+    if (warningSent) continue;
+    const checkedOutAt = r[7] instanceof Date ? r[7] : new Date(r[7]);
+    if (isNaN(checkedOutAt.getTime())) continue;
+    if ((now - checkedOutAt) <= thresholdMs) continue;
+    try {
+      sendOverdueWarning_(r, now);
+      sheet.getRange(i + 2, 11).setValue(true);
+      sent++;
+    } catch (err) {
+      Logger.log('Failed to send overdue warning for ' + r[0] + ': ' + err);
+    }
+  }
+  return sent;
+}
+
+function sendOverdueWarning_(row, now) {
+  const studentName = row[2] || row[1];
+  const studentEmail = row[1];
+  const destination = row[4];
+  const teacherEmail = row[5];
+  const notes = row[6];
+  const checkedOutAt = row[7] instanceof Date ? row[7] : new Date(row[7]);
+  const minutesAway = Math.round((now - checkedOutAt) / 60000);
+  const subject = '[AISA Hub] Overdue: ' + studentName + ' has been out ' + minutesAway + ' minutes';
+  const body =
+    'Overdue check-out warning\n\n' +
+    'Student: ' + studentName + ' <' + studentEmail + '>\n' +
+    'Destination: ' + destination + '\n' +
+    'Checked out at: ' + checkedOutAt.toLocaleString() + '\n' +
+    'Time away: ' + minutesAway + ' minutes\n' +
+    (notes ? 'Notes: ' + notes + '\n' : '') +
+    '\nThey have not yet checked back in. You may want to follow up.\n' +
+    'Sent automatically by the AISA Student Hub.';
+  MailApp.sendEmail({ to: teacherEmail, subject: subject, body: body });
+}
+
+// Public-named function so teachers can wire it to a time-driven trigger
+// (Apps Script editor > Triggers > runOverdueCheck every 5 minutes).
+function runOverdueCheck() {
+  return checkOverdueCheckouts_();
 }
 
 function sendCheckoutEmail_(claims, destination, teacherEmail, notes, mode, durationMinutes) {

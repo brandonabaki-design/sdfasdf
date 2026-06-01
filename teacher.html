@@ -26,6 +26,11 @@
     </a>
 
     <div class="topbar-meta">
+      <button id="checkouts-btn" class="checkouts-btn empty" type="button">
+        <span class="checkouts-icon">🚪</span>
+        <span>Out now</span>
+        <span class="checkouts-count" id="checkouts-count">0</span>
+      </button>
       <button id="flagged-btn" class="flagged-btn empty" type="button">
         <span class="flagged-icon">🚩</span>
         <span>Flagged</span>
@@ -40,6 +45,22 @@
       <button id="sign-out" class="btn btn-ghost">Sign out</button>
     </div>
   </nav>
+
+  <!-- Out now (active check-outs) slide-in panel -->
+  <div id="checkouts-backdrop" class="checkouts-backdrop"></div>
+  <aside id="checkouts-panel" class="checkouts-panel" aria-hidden="true">
+    <header class="checkouts-panel-header">
+      <div>
+        <h2 class="font-heading">
+          <span class="panel-icon checkouts-panel-icon" aria-hidden="true">🚪</span>
+          Students out now
+        </h2>
+        <p class="panel-sub" id="checkouts-panel-sub">Loading...</p>
+      </div>
+      <button class="checkouts-close" id="checkouts-close" aria-label="Close panel">×</button>
+    </header>
+    <div class="checkouts-list" id="checkouts-list"></div>
+  </aside>
 
   <!-- Flagged slide-in panel -->
   <div id="flagged-backdrop" class="flagged-backdrop"></div>

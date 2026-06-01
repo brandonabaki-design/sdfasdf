@@ -22,6 +22,8 @@ async function showSignedIn(user) {
       loadPrompts();
       loadDrafts();
       refreshFlaggedCount();
+      refreshCheckouts();
+      startCheckoutPolling();
     } else {
       notTeacher.hidden = false;
     }
@@ -40,6 +42,136 @@ function showSignedOut() {
   document.getElementById('role-loading').hidden = false;
   document.getElementById('role-loading').textContent = 'Checking access...';
   closeFlaggedPanel();
+  closeCheckoutsPanel();
+  stopCheckoutPolling();
+}
+
+/* ============================================================
+   Active check-outs panel
+   ============================================================ */
+
+let checkoutsPollId = null;
+
+function startCheckoutPolling() {
+  if (checkoutsPollId) clearInterval(checkoutsPollId);
+  checkoutsPollId = setInterval(refreshCheckouts, 60000);
+}
+function stopCheckoutPolling() {
+  if (checkoutsPollId) {
+    clearInterval(checkoutsPollId);
+    checkoutsPollId = null;
+  }
+}
+
+async function refreshCheckouts() {
+  try {
+    const data = await api('list_active_checkouts');
+    if (!data.ok) return;
+    updateCheckoutsButton(data.checkouts);
+    populateCheckoutsPanel(data.checkouts);
+  } catch (err) { /* silent */ }
+}
+
+function updateCheckoutsButton(checkouts) {
+  const btn = document.getElementById('checkouts-btn');
+  const count = document.getElementById('checkouts-count');
+  if (!btn || !count) return;
+  count.textContent = String(checkouts.length);
+  btn.classList.toggle('empty', checkouts.length === 0);
+  btn.classList.toggle('has-overdue', checkouts.some(c => c.overdue));
+}
+
+function populateCheckoutsPanel(checkouts) {
+  const list = document.getElementById('checkouts-list');
+  const sub = document.getElementById('checkouts-panel-sub');
+  if (!list || !sub) return;
+  if (checkouts.length === 0) {
+    sub.textContent = 'Everyone is in class.';
+    list.innerHTML = `
+      <div class="checkouts-empty">
+        <span class="empty-icon" aria-hidden="true">🎒</span>
+        <h3 class="font-heading">No one is out</h3>
+        <p>No students are currently checked out.</p>
+      </div>
+    `;
+    return;
+  }
+  const overdueCount = checkouts.filter(c => c.overdue).length;
+  sub.textContent = `${checkouts.length} student${checkouts.length === 1 ? '' : 's'} out`
+    + (overdueCount ? ` · ${overdueCount} overdue` : '');
+  list.innerHTML = '';
+  for (const c of checkouts) {
+    list.appendChild(renderCheckoutItem(c));
+  }
+}
+
+function destinationEmoji(d) {
+  const key = String(d || '').toLowerCase();
+  if (key.includes('bathroom') || key.includes('restroom')) return '🚻';
+  if (key.includes('nurse')) return '⚕️';
+  if (key.includes('counsellor') || key.includes('counselor')) return '💬';
+  return '🚪';
+}
+
+function renderCheckoutItem(c) {
+  const item = document.createElement('article');
+  item.className = 'checkout-item' + (c.overdue ? ' overdue' : '');
+  const initials = (c.student_name || c.student_email || '?')
+    .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
+  item.innerHTML = `
+    <div class="checkout-item-head">
+      <span class="checkout-item-avatar"></span>
+      <div class="checkout-student-line">
+        <p class="student-name"></p>
+        <p class="student-email"></p>
+      </div>
+      <span class="checkout-destination-chip">
+        <span class="dest-emoji"></span>
+        <span class="dest-text"></span>
+      </span>
+    </div>
+    <p class="checkout-meta">
+      <span class="time-away muted small"></span>
+      <span class="notified muted small"></span>
+    </p>
+    <p class="checkout-notes muted small" hidden></p>
+    ${c.overdue ? '<p class="overdue-banner">OVERDUE — warning email sent to teacher</p>' : ''}
+  `;
+  item.querySelector('.checkout-item-avatar').textContent = initials || '?';
+  item.querySelector('.student-name').textContent = c.student_name || '(no name)';
+  item.querySelector('.student-email').textContent = c.student_email || '';
+  item.querySelector('.dest-emoji').textContent = destinationEmoji(c.destination);
+  item.querySelector('.dest-text').textContent = c.destination || '—';
+  item.querySelector('.time-away').textContent = `Out ${c.minutes_away} min${c.minutes_away === 1 ? '' : 's'}`;
+  item.querySelector('.notified').textContent = `· Notified ${c.teacher_email}`;
+  if (c.notes) {
+    const notes = item.querySelector('.checkout-notes');
+    notes.hidden = false;
+    notes.textContent = 'Note: ' + c.notes;
+  }
+  if (c.overdue && !c.warning_sent) {
+    // Server marks warning_sent on refresh; on the very first overdue render
+    // we still want the banner styling but no extra confirmation text.
+  }
+  return item;
+}
+
+function openCheckoutsPanel() {
+  document.getElementById('checkouts-backdrop').classList.add('open');
+  const panel = document.getElementById('checkouts-panel');
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+  refreshCheckouts();
+}
+
+function closeCheckoutsPanel() {
+  const backdrop = document.getElementById('checkouts-backdrop');
+  const panel = document.getElementById('checkouts-panel');
+  if (backdrop) backdrop.classList.remove('open');
+  if (panel) {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
 }
 
 async function loadPrompts() {
@@ -780,6 +912,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('flagged-close').addEventListener('click', closeFlaggedPanel);
   document.getElementById('flagged-backdrop').addEventListener('click', closeFlaggedPanel);
 
+  document.getElementById('checkouts-btn').addEventListener('click', openCheckoutsPanel);
+  document.getElementById('checkouts-close').addEventListener('click', closeCheckoutsPanel);
+  document.getElementById('checkouts-backdrop').addEventListener('click', closeCheckoutsPanel);
+
   document.getElementById('share-close').addEventListener('click', closeShareModal);
   document.getElementById('share-cancel').addEventListener('click', closeShareModal);
   document.getElementById('share-backdrop').addEventListener('click', closeShareModal);
@@ -792,6 +928,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') {
       closeFlaggedPanel();
       closeShareModal();
+      closeCheckoutsPanel();
     }
   });
 });
