@@ -69,12 +69,16 @@ function renderTeacherPromptCard(p) {
       <h3></h3>
       <p class="prompt-body"></p>
       <p class="muted small">from <span class="prompt-teacher"></span> · <span class="prompt-time"></span></p>
-      <button type="button" class="link toggle-responses">Show responses</button>
+      <div class="prompt-actions">
+        <button type="button" class="link toggle-responses">Show responses</button>
+        <button type="button" class="link summarize-btn">Generate AI summary</button>
+      </div>
     </header>
     <div class="responses-panel" hidden>
       <p class="muted small responses-status">Loading...</p>
       <div class="responses-list"></div>
     </div>
+    <div class="summary-panel" hidden></div>
   `;
   card.querySelector('h3').textContent = p.title || '(untitled)';
   card.querySelector('.prompt-body').textContent = p.body || '';
@@ -94,7 +98,92 @@ function renderTeacherPromptCard(p) {
     }
   });
 
+  const summarizeBtn = card.querySelector('.summarize-btn');
+  const summaryPanel = card.querySelector('.summary-panel');
+  summarizeBtn.addEventListener('click', () => generateSummary(p.id, summarizeBtn, summaryPanel));
+
   return card;
+}
+
+async function generateSummary(promptId, button, panel) {
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = 'Generating...';
+  panel.hidden = false;
+  panel.innerHTML = '<p class="muted small">Asking Gemini to summarise responses — this can take 10-30 seconds...</p>';
+
+  try {
+    const data = await api('summarize_prompt_responses', { prompt_id: promptId });
+    if (!data.ok) {
+      panel.innerHTML = `<p class="muted small">Couldn't generate: ${data.error}</p>`;
+      return;
+    }
+    renderSummary(panel, data.summary);
+  } catch (err) {
+    panel.innerHTML = `<p class="muted small">Network error: ${err.message}</p>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText === 'Generate AI summary' ? 'Regenerate AI summary' : originalText;
+  }
+}
+
+function renderSummary(container, s) {
+  container.innerHTML = `
+    <div class="class-summary">
+      <p class="summary-meta muted small"></p>
+      <h4>Overview</h4>
+      <p class="summary-overview"></p>
+      <h4>Common themes</h4>
+      <ul class="summary-themes"></ul>
+      <h4>Misconceptions / gaps</h4>
+      <ul class="summary-misconceptions"></ul>
+      <h4>Students to follow up with</h4>
+      <ul class="summary-follow-up"></ul>
+      <h4>Suggested next steps</h4>
+      <ul class="summary-next-steps"></ul>
+    </div>
+  `;
+
+  const meta = `${s.response_count} response${s.response_count === 1 ? '' : 's'} · generated ${new Date(s.generated_at).toLocaleString()}`;
+  container.querySelector('.summary-meta').textContent = meta;
+  container.querySelector('.summary-overview').textContent = s.overview || '(no overview)';
+
+  fillList(container.querySelector('.summary-themes'), s.themes);
+  fillList(container.querySelector('.summary-misconceptions'), s.misconceptions);
+  fillList(container.querySelector('.summary-next-steps'), s.next_steps);
+
+  const followUpUl = container.querySelector('.summary-follow-up');
+  followUpUl.innerHTML = '';
+  if (!s.follow_up_students || s.follow_up_students.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'None — looks good across the class.';
+    followUpUl.appendChild(li);
+  } else {
+    for (const f of s.follow_up_students) {
+      const li = document.createElement('li');
+      li.innerHTML = '<strong></strong> — <span></span>';
+      li.querySelector('strong').textContent = f.email;
+      li.querySelector('span').textContent = f.reason;
+      followUpUl.appendChild(li);
+    }
+  }
+}
+
+function fillList(ul, items) {
+  ul.innerHTML = '';
+  if (!items || items.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = '(none noted)';
+    ul.appendChild(li);
+    return;
+  }
+  for (const item of items) {
+    const li = document.createElement('li');
+    li.textContent = item;
+    ul.appendChild(li);
+  }
 }
 
 async function loadResponsesForPrompt(card, promptId) {

@@ -30,6 +30,40 @@ const DEFAULT_RESOURCE_MESSAGE =
   "Thanks for sharing — that took courage. Your teacher has been notified and " +
   "will follow up with you. If you need to talk to someone right now, please reach " +
   "out to your school counsellor or a trusted adult.";
+const SUMMARY_SYSTEM_PROMPT =
+  "You are an educational consultant reading all student responses to a single " +
+  "class prompt. Produce a concise, actionable summary for the teacher as a JSON " +
+  "object matching the schema:\n\n" +
+  "- overview: 2-3 sentence summary of how the class engaged with the prompt.\n" +
+  "- themes: 2-5 short bullet sentences capturing common patterns or ideas.\n" +
+  "- misconceptions: 0-3 short bullets describing errors, confusions, or gaps. " +
+  "Empty array if none.\n" +
+  "- follow_up_students: 0-N objects ({email, reason}) for students whose response " +
+  "suggests they need extra support — confusion, minimal effort, or distress. " +
+  "Be specific and kind. Empty array if none.\n" +
+  "- next_steps: 1-3 short, concrete suggestions for the teacher's next class.\n\n" +
+  "Ground every observation in what students actually wrote. Don't invent data.";
+const SUMMARY_SCHEMA = {
+  type: 'object',
+  properties: {
+    overview: { type: 'string' },
+    themes: { type: 'array', items: { type: 'string' } },
+    misconceptions: { type: 'array', items: { type: 'string' } },
+    follow_up_students: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          email: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['email', 'reason'],
+      },
+    },
+    next_steps: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['overview', 'themes', 'misconceptions', 'follow_up_students', 'next_steps'],
+};
 
 function doPost(e) {
   try {
@@ -64,6 +98,10 @@ function doPost(e) {
       case 'list_responses_for_prompt':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, responses: listResponsesForPrompt_(payload.prompt_id || '') });
+
+      case 'summarize_prompt_responses':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, summary: summarizePromptResponses_(payload.prompt_id || '') });
 
       case 'submit_response':
         return jsonOut_({
@@ -338,6 +376,96 @@ function getGeminiReview_(prompt, responseBody) {
     distress_detected: !!parsed.distress_detected,
     distress_reason: String(parsed.distress_reason || '').trim(),
     model,
+  };
+}
+
+function summarizePromptResponses_(promptId) {
+  if (!promptId) throw new Error('prompt_id is required');
+  const prompt = getPromptById_(promptId);
+  if (!prompt) throw new Error('prompt not found');
+
+  const responses = listResponsesForPrompt_(promptId);
+  const generatedAt = new Date().toISOString();
+  if (responses.length === 0) {
+    return {
+      generated_at: generatedAt,
+      response_count: 0,
+      overview: 'No student responses yet for this prompt.',
+      themes: [],
+      misconceptions: [],
+      follow_up_students: [],
+      next_steps: [],
+    };
+  }
+
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+  const model = props.getProperty('GEMINI_MODEL') || DEFAULT_GEMINI_MODEL;
+
+  const responsesText = responses
+    .map((r, i) => '#' + (i + 1) + ' ' + (r.student_name || 'unknown') +
+                   ' <' + r.student_email + '>:\n' + r.body)
+    .join('\n\n---\n\n');
+
+  const userText =
+    'Prompt title: ' + (prompt.title || '(untitled)') + '\n\n' +
+    'Prompt:\n' + (prompt.body || '') + '\n\n' +
+    'Student responses (' + responses.length + ' total):\n\n' + responsesText;
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(model) + ':generateContent?key=' +
+              encodeURIComponent(apiKey);
+  const requestBody = {
+    systemInstruction: { parts: [{ text: SUMMARY_SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+      responseSchema: SUMMARY_SCHEMA,
+    },
+  };
+
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(requestBody),
+    muteHttpExceptions: true,
+  });
+  const code = res.getResponseCode();
+  if (code !== 200) {
+    throw new Error('Gemini API ' + code + ': ' + res.getContentText().slice(0, 200));
+  }
+
+  const data = JSON.parse(res.getContentText());
+  const candidate = data.candidates && data.candidates[0];
+  if (!candidate) throw new Error('No candidate in Gemini response');
+  const text =
+    (candidate.content && candidate.content.parts && candidate.content.parts[0] &&
+     candidate.content.parts[0].text) || '';
+  if (!text) throw new Error('Empty Gemini response');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new Error('Could not parse summary JSON: ' + text.slice(0, 200));
+  }
+
+  return {
+    generated_at: generatedAt,
+    response_count: responses.length,
+    overview: String(parsed.overview || ''),
+    themes: Array.isArray(parsed.themes) ? parsed.themes.map(String) : [],
+    misconceptions: Array.isArray(parsed.misconceptions) ? parsed.misconceptions.map(String) : [],
+    follow_up_students: Array.isArray(parsed.follow_up_students)
+      ? parsed.follow_up_students.map(s => ({
+          email: String(s.email || ''),
+          reason: String(s.reason || ''),
+        }))
+      : [],
+    next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.map(String) : [],
   };
 }
 
