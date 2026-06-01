@@ -206,7 +206,7 @@ function getGeminiFeedback_(prompt, responseBody) {
   const requestBody = {
     systemInstruction: { parts: [{ text: FEEDBACK_SYSTEM_PROMPT }] },
     contents: [{ role: 'user', parts: [{ text: userText }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
   };
 
   const res = UrlFetchApp.fetch(url, {
@@ -222,10 +222,20 @@ function getGeminiFeedback_(prompt, responseBody) {
   }
 
   const data = JSON.parse(res.getContentText());
+  const candidate = data.candidates && data.candidates[0];
+  if (!candidate) throw new Error('No candidate in Gemini response');
+
+  const finishReason = candidate.finishReason || 'UNKNOWN';
   const text =
-    data.candidates && data.candidates[0] && data.candidates[0].content &&
-    data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
-    data.candidates[0].content.parts[0].text;
+    (candidate.content && candidate.content.parts && candidate.content.parts[0] &&
+     candidate.content.parts[0].text) || '';
+
+  // STOP = normal completion. Any other reason (SAFETY, MAX_TOKENS, RECITATION...)
+  // means the output is partial or blocked — discard it rather than show garbage.
+  if (finishReason !== 'STOP') {
+    Logger.log('Gemini non-STOP finish: ' + finishReason + ' (partial length=' + text.length + ')');
+    throw new Error('finishReason=' + finishReason);
+  }
   if (!text) throw new Error('Empty Gemini response');
   return { feedback: String(text).trim(), model };
 }
