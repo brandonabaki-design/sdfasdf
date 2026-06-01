@@ -105,9 +105,13 @@
         <div class="teacher-grid">
           <div class="panel panel-form">
             <header class="panel-header">
-              <h2 class="panel-title font-heading">Create a prompt</h2>
-              <p class="panel-subtitle">Publish a question or activity. Students see it instantly.</p>
+              <h2 class="panel-title font-heading" id="form-title">Create a prompt</h2>
+              <p class="panel-subtitle" id="form-subtitle">Publish a question or activity. Students see it instantly.</p>
             </header>
+            <div id="draft-banner" class="draft-banner" hidden>
+              <span>Customising draft from <strong id="draft-from"></strong></span>
+              <button type="button" class="link-btn" id="cancel-draft">Cancel</button>
+            </div>
             <form id="prompt-form">
               <label>
                 Title
@@ -119,22 +123,65 @@
                 <textarea id="prompt-body" rows="6" required
                           placeholder="What would you like the students to work on?"></textarea>
               </label>
-              <button type="submit" class="btn btn-primary">Publish prompt</button>
+              <label>
+                Audience <span class="field-hint">leave blank for all aisa.sch.ae students</span>
+                <textarea id="prompt-audience" rows="2"
+                          placeholder="student1@aisa.sch.ae, student2@aisa.sch.ae"></textarea>
+              </label>
+              <label>
+                Closes at <span class="field-hint">optional — students can't submit after this time</span>
+                <input id="prompt-closes-at" type="datetime-local" />
+              </label>
+              <button type="submit" class="btn btn-primary" id="publish-btn">Publish prompt</button>
               <p id="result" class="status-line" aria-live="polite"></p>
             </form>
           </div>
 
           <div class="panel">
             <header class="panel-header">
-              <h2 class="panel-title font-heading">Active prompts</h2>
-              <p class="panel-subtitle">Expand each prompt to read responses or generate an AI summary.</p>
+              <h2 class="panel-title font-heading">Your prompts</h2>
+              <p class="panel-subtitle">Drafts shared with you appear first, then your active prompts.</p>
             </header>
+
+            <section id="drafts-section" class="drafts-section" hidden>
+              <h3 class="drafts-title font-heading">
+                <span class="drafts-badge">📨 Shared with you</span>
+                <span id="drafts-count" class="muted small"></span>
+              </h3>
+              <div id="drafts-list" class="drafts-list"></div>
+            </section>
+
             <div id="prompts-list" class="prompts-grid"></div>
           </div>
         </div>
       </section>
     </section>
   </main>
+
+  <!-- Share-with-teacher modal -->
+  <div id="share-backdrop" class="modal-backdrop" hidden></div>
+  <div id="share-modal" class="modal" hidden role="dialog" aria-labelledby="share-title">
+    <header class="modal-header">
+      <h2 id="share-title" class="font-heading">
+        <span class="panel-icon share-icon" aria-hidden="true">📨</span>
+        Send to teacher
+      </h2>
+      <button class="modal-close" id="share-close" aria-label="Close">×</button>
+    </header>
+    <div class="modal-body">
+      <p class="muted small">Send a draft copy of this prompt to another teacher. They can edit and publish it to their own students.</p>
+      <p class="share-preview muted small">Prompt: <strong id="share-prompt-title"></strong></p>
+      <label>
+        Recipient teacher email
+        <input id="share-recipient" type="email" placeholder="teacher@aisa.sch.ae" />
+      </label>
+      <p id="share-result" class="status-line" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="share-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="share-send" type="button">Send draft</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="page-footer">
     <a href="index.html" class="footer-link">← Student view</a>

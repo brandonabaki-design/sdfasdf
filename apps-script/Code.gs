@@ -9,7 +9,7 @@ const EVENTS_SHEET = 'StudentEvents';
 const PROMPTS_SHEET = 'Prompts';
 const RESPONSES_SHEET = 'Responses';
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
-const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status'];
+const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status', 'closes_at', 'audience', 'shared_from'];
 const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason', 'resolved'];
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const REVIEW_SYSTEM_PROMPT =
@@ -86,14 +86,30 @@ function doPost(e) {
         });
 
       case 'list_prompts':
-        return jsonOut_({ ok: true, prompts: listActivePrompts_() });
+        return jsonOut_({ ok: true, prompts: listActivePrompts_(claims.email) });
 
       case 'create_prompt':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({
           ok: true,
-          prompt: createPrompt_(claims.email, payload.title || '', payload.body || ''),
+          prompt: createPrompt_(claims.email, payload.title || '', payload.body || '', payload.closes_at || '', payload.audience || '', '', 'active'),
         });
+
+      case 'share_prompt':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_(sharePrompt_(claims, payload.prompt_id || '', payload.recipient_email || ''));
+
+      case 'list_drafts':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, drafts: listDraftsForTeacher_(claims.email) });
+
+      case 'publish_draft':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_(publishDraft_(claims, payload));
+
+      case 'discard_draft':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_(discardDraft_(claims.email, payload.draft_id || ''));
 
       case 'list_responses_for_prompt':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
@@ -175,13 +191,24 @@ function logEvent_(claims, action, clientTimestamp) {
   return { ok: true, timestamp: serverTimestamp.toISOString() };
 }
 
-function listActivePrompts_() {
+function listActivePrompts_(viewerEmail) {
   const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   const values = sheet.getRange(2, 1, lastRow - 1, PROMPTS_HEADERS.length).getValues();
+  const viewer = String(viewerEmail || '').toLowerCase();
+  const viewerIsTeacher = isTeacher_(viewer);
   return values
     .filter(r => String(r[5]).toLowerCase() === 'active')
+    .filter(r => {
+      // Teachers see every active prompt in their dashboard.
+      if (viewerIsTeacher) return true;
+      // Students filter by audience. Blank / "all" / "everyone" = all students.
+      const audience = String(r[7] || '').trim().toLowerCase();
+      if (!audience || audience === 'all' || audience === 'everyone') return true;
+      const allowed = audience.split(/[,;\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+      return allowed.indexOf(viewer) !== -1;
+    })
     .map(r => ({
       id: r[0],
       created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
@@ -189,6 +216,9 @@ function listActivePrompts_() {
       title: r[3],
       body: r[4],
       status: r[5],
+      closes_at: r[6] instanceof Date ? r[6].toISOString() : (r[6] ? String(r[6]) : ''),
+      audience: r[7] || '',
+      shared_from: r[8] || '',
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
@@ -200,10 +230,139 @@ function getPromptById_(promptId) {
   const values = sheet.getRange(2, 1, lastRow - 1, PROMPTS_HEADERS.length).getValues();
   for (const r of values) {
     if (r[0] === promptId) {
-      return { id: r[0], created_at: r[1], teacher_email: r[2], title: r[3], body: r[4], status: r[5] };
+      return {
+        id: r[0],
+        created_at: r[1],
+        teacher_email: r[2],
+        title: r[3],
+        body: r[4],
+        status: r[5],
+        closes_at: r[6] instanceof Date ? r[6].toISOString() : (r[6] ? String(r[6]) : ''),
+        audience: r[7] || '',
+        shared_from: r[8] || '',
+      };
     }
   }
   return null;
+}
+
+function isPromptClosed_(prompt) {
+  if (!prompt || !prompt.closes_at) return false;
+  const closesAt = new Date(prompt.closes_at);
+  if (isNaN(closesAt.getTime())) return false;
+  return closesAt < new Date();
+}
+
+function sharePrompt_(sender, promptId, recipientEmail) {
+  if (!promptId) return { ok: false, error: 'prompt_id required' };
+  const recipient = String(recipientEmail || '').trim().toLowerCase();
+  if (!recipient) return { ok: false, error: 'recipient_email required' };
+  if (recipient === String(sender.email).toLowerCase()) {
+    return { ok: false, error: "can't share with yourself" };
+  }
+  if (!recipient.endsWith('@' + ALLOWED_HD)) {
+    return { ok: false, error: 'recipient must be an @' + ALLOWED_HD + ' address' };
+  }
+  if (!isTeacher_(recipient)) {
+    return { ok: false, error: 'recipient is not on the teacher allow-list' };
+  }
+  const prompt = getPromptById_(promptId);
+  if (!prompt) return { ok: false, error: 'prompt not found' };
+
+  const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
+  const id = Utilities.getUuid();
+  const createdAt = new Date();
+  sheet.appendRow([
+    id,
+    createdAt,
+    recipient,
+    prompt.title,
+    prompt.body,
+    'draft',
+    prompt.closes_at || '',
+    prompt.audience || '',
+    sender.email,
+  ]);
+  return { ok: true, draft_id: id, recipient: recipient };
+}
+
+function listDraftsForTeacher_(teacherEmail) {
+  const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, PROMPTS_HEADERS.length).getValues();
+  const me = String(teacherEmail).toLowerCase();
+  return values
+    .filter(r => String(r[5]).toLowerCase() === 'draft' && String(r[2]).toLowerCase() === me)
+    .map(r => ({
+      id: r[0],
+      created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+      title: r[3],
+      body: r[4],
+      closes_at: r[6] instanceof Date ? r[6].toISOString() : (r[6] ? String(r[6]) : ''),
+      audience: r[7] || '',
+      shared_from: r[8] || '',
+    }))
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
+function publishDraft_(claims, payload) {
+  const draftId = payload.draft_id;
+  if (!draftId) return { ok: false, error: 'draft_id required' };
+  const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: false, error: 'no prompts' };
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0] === draftId) {
+      const rowIndex = i + 2;
+      const rowVals = sheet.getRange(rowIndex, 1, 1, PROMPTS_HEADERS.length).getValues()[0];
+      if (String(rowVals[5]).toLowerCase() !== 'draft') return { ok: false, error: 'not a draft' };
+      if (String(rowVals[2]).toLowerCase() !== String(claims.email).toLowerCase()) {
+        return { ok: false, error: 'not your draft' };
+      }
+      const title = (payload.title !== undefined) ? payload.title : rowVals[3];
+      const body = (payload.body !== undefined) ? payload.body : rowVals[4];
+      const closesAt = (payload.closes_at !== undefined) ? payload.closes_at : (rowVals[6] || '');
+      const audience = (payload.audience !== undefined) ? payload.audience : (rowVals[7] || '');
+      sheet.getRange(rowIndex, 4, 1, 5).setValues([[title, body, 'active', closesAt, audience]]);
+      return {
+        ok: true,
+        prompt: {
+          id: draftId,
+          created_at: rowVals[1] instanceof Date ? rowVals[1].toISOString() : String(rowVals[1]),
+          teacher_email: rowVals[2],
+          title: title,
+          body: body,
+          status: 'active',
+          closes_at: closesAt,
+          audience: audience,
+          shared_from: rowVals[8] || '',
+        },
+      };
+    }
+  }
+  return { ok: false, error: 'not found' };
+}
+
+function discardDraft_(teacherEmail, draftId) {
+  if (!draftId) return { ok: false, error: 'draft_id required' };
+  const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: false, error: 'no prompts' };
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0] === draftId) {
+      const rowIndex = i + 2;
+      const rowVals = sheet.getRange(rowIndex, 1, 1, PROMPTS_HEADERS.length).getValues()[0];
+      if (String(rowVals[2]).toLowerCase() !== String(teacherEmail).toLowerCase()) {
+        return { ok: false, error: 'not your draft' };
+      }
+      sheet.getRange(rowIndex, 6).setValue('discarded');
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'not found' };
 }
 
 function submitResponse_(claims, promptId, body) {
@@ -213,6 +372,7 @@ function submitResponse_(claims, promptId, body) {
   const prompt = getPromptById_(promptId);
   if (!prompt) throw new Error('prompt not found');
   if (String(prompt.status).toLowerCase() !== 'active') throw new Error('prompt is not active');
+  if (isPromptClosed_(prompt)) throw new Error('this prompt has closed');
 
   const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
   const id = Utilities.getUuid();
@@ -633,19 +793,32 @@ function listResponsesForStudent_(googleSub) {
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
-function createPrompt_(teacherEmail, title, body) {
+function createPrompt_(teacherEmail, title, body, closesAt, audience, sharedFrom, status) {
   if (!String(title).trim() && !String(body).trim()) throw new Error('prompt is empty');
   const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
   const id = Utilities.getUuid();
   const createdAt = new Date();
-  sheet.appendRow([id, createdAt, teacherEmail, title, body, 'active']);
+  sheet.appendRow([
+    id,
+    createdAt,
+    teacherEmail,
+    title,
+    body,
+    status || 'active',
+    closesAt || '',
+    audience || '',
+    sharedFrom || '',
+  ]);
   return {
     id,
     created_at: createdAt.toISOString(),
     teacher_email: teacherEmail,
     title,
     body,
-    status: 'active',
+    status: status || 'active',
+    closes_at: closesAt || '',
+    audience: audience || '',
+    shared_from: sharedFrom || '',
   };
 }
 

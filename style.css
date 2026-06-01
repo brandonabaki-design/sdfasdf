@@ -1182,6 +1182,261 @@ body:not(.is-signed-in) #flagged-btn { display: none !important; }
 }
 
 /* ============================================================
+   Prompt meta line (teacher + student)
+   ============================================================ */
+
+.prompt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.meta-item { display: inline-flex; align-items: center; gap: 6px; }
+.meta-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.prompt-teacher, .prompt-time, .prompt-audience, .prompt-closes { font-family: var(--font-mono); }
+.closes-meta.closed { color: #fda4af; }
+.closes-meta.closed .closes-label { color: #fda4af; }
+
+.closed-banner {
+  background: rgba(244, 63, 94, 0.10);
+  border: 1px solid rgba(244, 63, 94, 0.30);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 16px;
+  color: #fecdd3;
+  font-size: 13px;
+}
+
+/* ============================================================
+   Form helpers
+   ============================================================ */
+
+.field-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+
+.panel-form input[type="datetime-local"] {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  color-scheme: dark;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.panel-form input[type="datetime-local"]:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--indigo-bright);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+}
+
+/* ============================================================
+   Drafts section
+   ============================================================ */
+
+.drafts-section {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 16px;
+}
+.drafts-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+.drafts-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.18);
+  color: var(--amber-bright);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.drafts-list { display: flex; flex-direction: column; gap: 10px; }
+
+.draft-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.draft-card .draft-from { color: var(--amber-bright); font-weight: 600; font-family: var(--font-mono); }
+.draft-card .draft-time { font-family: var(--font-mono); }
+.draft-card .draft-title { font-size: 15px; margin: 4px 0 6px; }
+.draft-card .draft-preview {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.draft-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.draft-actions .btn { padding: 8px 14px; font-size: 13px; }
+
+.draft-banner {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.06));
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 10px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--amber-bright);
+}
+.draft-banner strong { color: white; }
+
+/* ============================================================
+   Share modal
+   ============================================================ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(6, 10, 30, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 70;
+  width: min(480px, calc(100% - 40px));
+  background: rgba(13, 22, 48, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0;
+}
+.share-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--amber), var(--amber-deep));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 6px 16px -6px var(--amber-glow);
+}
+.modal-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 18px;
+}
+.modal-close:hover { background: rgba(255, 255, 255, 0.12); }
+
+.modal-body { padding: 20px 22px 22px; }
+.modal-body label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 12px 0 0;
+}
+.modal-body input[type="email"] {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-mono);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.modal-body input[type="email"]:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--indigo-bright);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+}
+.share-preview {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 12px 0 0;
+}
+.share-preview strong { color: white; }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* ============================================================
    Footer
    ============================================================ */
 

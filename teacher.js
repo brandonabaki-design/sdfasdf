@@ -1,5 +1,8 @@
 // Teacher page logic. Auth + api() helpers live in auth.js.
 
+let currentDraftId = null;
+let currentSharePromptId = null;
+
 async function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
@@ -17,6 +20,7 @@ async function showSignedIn(user) {
     if (me.ok && me.is_teacher) {
       tools.hidden = false;
       loadPrompts();
+      loadDrafts();
       refreshFlaggedCount();
     } else {
       notTeacher.hidden = false;
@@ -66,15 +70,25 @@ function renderTeacherPromptCard(p) {
   card.dataset.promptId = p.id;
   const created = new Date(p.created_at).toLocaleString();
 
+  const closesAt = p.closes_at ? new Date(p.closes_at) : null;
+  const closed = closesAt && !isNaN(closesAt.getTime()) && closesAt < new Date();
+  const audienceText = formatAudience(p.audience);
+
   card.innerHTML = `
     <header class="prompt-header">
       <h3 class="font-heading"></h3>
       <p class="prompt-body"></p>
-      <p class="muted small">from <span class="prompt-teacher"></span> · <span class="prompt-time"></span></p>
+      <div class="prompt-meta">
+        <span class="meta-item"><span class="meta-label">From</span> <span class="prompt-teacher"></span></span>
+        <span class="meta-item"><span class="meta-label">Published</span> <span class="prompt-time"></span></span>
+        <span class="meta-item audience-meta"><span class="meta-label">Audience</span> <span class="prompt-audience"></span></span>
+        <span class="meta-item closes-meta" hidden><span class="meta-label closes-label">Closes</span> <span class="prompt-closes"></span></span>
+      </div>
       <div class="prompt-actions">
         <button type="button" class="link-btn toggle-responses">Show responses</button>
         <button type="button" class="link-btn toggle-students">View by student</button>
         <button type="button" class="link-btn summarize-btn">Generate AI summary</button>
+        <button type="button" class="link-btn share-btn">Share with teacher</button>
       </div>
     </header>
     <div class="responses-panel" hidden>
@@ -92,6 +106,19 @@ function renderTeacherPromptCard(p) {
   card.querySelector('.prompt-body').textContent = p.body || '';
   card.querySelector('.prompt-teacher').textContent = p.teacher_email;
   card.querySelector('.prompt-time').textContent = created;
+  card.querySelector('.prompt-audience').textContent = audienceText;
+
+  if (closesAt && !isNaN(closesAt.getTime())) {
+    const closesMeta = card.querySelector('.closes-meta');
+    closesMeta.hidden = false;
+    closesMeta.querySelector('.prompt-closes').textContent = closesAt.toLocaleString();
+    if (closed) {
+      closesMeta.classList.add('closed');
+      closesMeta.querySelector('.closes-label').textContent = 'Closed';
+    }
+  }
+
+  card.querySelector('.share-btn').addEventListener('click', () => openShareModal(p));
 
   // Show responses
   const toggleBtn = card.querySelector('.toggle-responses');
@@ -533,29 +560,206 @@ function closeFlaggedPanel() {
 }
 
 /* ============================================================
-   Prompt publish form
+   Drafts
+   ============================================================ */
+
+async function loadDrafts() {
+  const section = document.getElementById('drafts-section');
+  const list = document.getElementById('drafts-list');
+  const count = document.getElementById('drafts-count');
+  try {
+    const data = await api('list_drafts');
+    if (!data.ok || !data.drafts || data.drafts.length === 0) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    count.textContent = `${data.drafts.length} draft${data.drafts.length === 1 ? '' : 's'}`;
+    list.innerHTML = '';
+    for (const d of data.drafts) {
+      list.appendChild(renderDraftCard(d));
+    }
+  } catch (err) {
+    section.hidden = true;
+  }
+}
+
+function renderDraftCard(d) {
+  const card = document.createElement('article');
+  card.className = 'draft-card';
+  card.innerHTML = `
+    <p class="muted small">From <strong class="draft-from"></strong> · <span class="draft-time"></span></p>
+    <h3 class="font-heading draft-title"></h3>
+    <p class="draft-preview"></p>
+    <div class="draft-actions">
+      <button type="button" class="btn btn-primary customise-btn">Customise &amp; publish</button>
+      <button type="button" class="btn btn-ghost discard-btn">Discard</button>
+    </div>
+  `;
+  card.querySelector('.draft-from').textContent = d.shared_from || 'Unknown';
+  card.querySelector('.draft-time').textContent = new Date(d.created_at).toLocaleString();
+  card.querySelector('.draft-title').textContent = d.title || '(untitled)';
+  card.querySelector('.draft-preview').textContent = d.body || '';
+
+  card.querySelector('.customise-btn').addEventListener('click', () => beginDraftCustomisation(d));
+  card.querySelector('.discard-btn').addEventListener('click', () => discardDraft(d.id));
+  return card;
+}
+
+function beginDraftCustomisation(d) {
+  currentDraftId = d.id;
+  document.getElementById('prompt-title').value = d.title || '';
+  document.getElementById('prompt-body').value = d.body || '';
+  document.getElementById('prompt-audience').value = d.audience || '';
+  document.getElementById('prompt-closes-at').value = isoToDatetimeLocal(d.closes_at);
+
+  document.getElementById('form-title').textContent = 'Customise & publish draft';
+  document.getElementById('form-subtitle').textContent = 'Edit anything and publish under your own account.';
+  document.getElementById('publish-btn').textContent = 'Publish draft';
+
+  const banner = document.getElementById('draft-banner');
+  banner.hidden = false;
+  document.getElementById('draft-from').textContent = d.shared_from || 'another teacher';
+
+  document.getElementById('prompt-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('prompt-title').focus();
+}
+
+function cancelDraftCustomisation() {
+  currentDraftId = null;
+  document.getElementById('prompt-form').reset();
+  document.getElementById('form-title').textContent = 'Create a prompt';
+  document.getElementById('form-subtitle').textContent = 'Publish a question or activity. Students see it instantly.';
+  document.getElementById('publish-btn').textContent = 'Publish prompt';
+  document.getElementById('draft-banner').hidden = true;
+  document.getElementById('result').textContent = '';
+}
+
+async function discardDraft(draftId) {
+  if (!confirm('Discard this draft? This can\'t be undone from the UI.')) return;
+  try {
+    const data = await api('discard_draft', { draft_id: draftId });
+    if (data.ok) {
+      if (currentDraftId === draftId) cancelDraftCustomisation();
+      loadDrafts();
+    } else {
+      alert('Error: ' + (data.error || 'unknown'));
+    }
+  } catch (err) {
+    alert('Network error: ' + err.message);
+  }
+}
+
+function isoToDatetimeLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function datetimeLocalToIso(local) {
+  if (!local) return '';
+  const d = new Date(local);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString();
+}
+
+function formatAudience(audience) {
+  const text = String(audience || '').trim();
+  if (!text || text.toLowerCase() === 'all' || text.toLowerCase() === 'everyone') {
+    return 'Everyone (all aisa.sch.ae)';
+  }
+  const list = text.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+  if (list.length === 1) return list[0];
+  return `${list.length} students`;
+}
+
+/* ============================================================
+   Share modal
+   ============================================================ */
+
+function openShareModal(prompt) {
+  currentSharePromptId = prompt.id;
+  document.getElementById('share-prompt-title').textContent = prompt.title || '(untitled)';
+  document.getElementById('share-recipient').value = '';
+  document.getElementById('share-result').textContent = '';
+  document.getElementById('share-backdrop').hidden = false;
+  document.getElementById('share-modal').hidden = false;
+  setTimeout(() => document.getElementById('share-recipient').focus(), 50);
+}
+
+function closeShareModal() {
+  currentSharePromptId = null;
+  document.getElementById('share-backdrop').hidden = true;
+  document.getElementById('share-modal').hidden = true;
+}
+
+async function sendShare() {
+  if (!currentSharePromptId) return;
+  const recipient = document.getElementById('share-recipient').value.trim();
+  const result = document.getElementById('share-result');
+  if (!recipient) {
+    result.textContent = 'Enter a recipient email.';
+    return;
+  }
+  const sendBtn = document.getElementById('share-send');
+  sendBtn.disabled = true;
+  result.textContent = 'Sending...';
+  try {
+    const data = await api('share_prompt', {
+      prompt_id: currentSharePromptId,
+      recipient_email: recipient,
+    });
+    if (data.ok) {
+      result.textContent = `Sent to ${data.recipient}. They'll see it under "Shared with you" on their dashboard.`;
+      setTimeout(closeShareModal, 1500);
+    } else {
+      result.textContent = `Error: ${data.error || 'unknown'}`;
+    }
+  } catch (err) {
+    result.textContent = `Network error: ${err.message}`;
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+/* ============================================================
+   Prompt publish form (handles both new prompts and draft publish)
    ============================================================ */
 
 async function submitPrompt(event) {
   event.preventDefault();
   const titleEl = document.getElementById('prompt-title');
   const bodyEl = document.getElementById('prompt-body');
+  const audienceEl = document.getElementById('prompt-audience');
+  const closesAtEl = document.getElementById('prompt-closes-at');
   const result = document.getElementById('result');
-  const submitBtn = event.target.querySelector('button[type="submit"]');
+  const submitBtn = document.getElementById('publish-btn');
 
   submitBtn.disabled = true;
   result.textContent = 'Publishing...';
 
+  const payload = {
+    title: titleEl.value.trim(),
+    body: bodyEl.value.trim(),
+    audience: audienceEl.value.trim(),
+    closes_at: datetimeLocalToIso(closesAtEl.value),
+  };
+
   try {
-    const data = await api('create_prompt', {
-      title: titleEl.value.trim(),
-      body: bodyEl.value.trim(),
-    });
+    let data;
+    if (currentDraftId) {
+      data = await api('publish_draft', { draft_id: currentDraftId, ...payload });
+    } else {
+      data = await api('create_prompt', payload);
+    }
     if (data.ok) {
-      result.textContent = 'Published.';
-      titleEl.value = '';
-      bodyEl.value = '';
+      result.textContent = currentDraftId ? 'Draft published.' : 'Published.';
+      const wasDraft = !!currentDraftId;
+      cancelDraftCustomisation();
       loadPrompts();
+      if (wasDraft) loadDrafts();
     } else {
       result.textContent = `Error: ${data.error || 'unknown'}`;
     }
@@ -568,12 +772,27 @@ async function submitPrompt(event) {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('prompt-form').addEventListener('submit', submitPrompt);
+  document.getElementById('cancel-draft').addEventListener('click', cancelDraftCustomisation);
+
   document.getElementById('sign-out').addEventListener('click', signOut);
+
   document.getElementById('flagged-btn').addEventListener('click', openFlaggedPanel);
   document.getElementById('flagged-close').addEventListener('click', closeFlaggedPanel);
   document.getElementById('flagged-backdrop').addEventListener('click', closeFlaggedPanel);
+
+  document.getElementById('share-close').addEventListener('click', closeShareModal);
+  document.getElementById('share-cancel').addEventListener('click', closeShareModal);
+  document.getElementById('share-backdrop').addEventListener('click', closeShareModal);
+  document.getElementById('share-send').addEventListener('click', sendShare);
+  document.getElementById('share-recipient').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendShare();
+  });
+
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeFlaggedPanel();
+    if (e.key === 'Escape') {
+      closeFlaggedPanel();
+      closeShareModal();
+    }
   });
 });
 

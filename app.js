@@ -54,15 +54,21 @@ function renderPromptCard(p) {
   card.className = 'prompt-card';
   card.dataset.promptId = p.id;
   const created = new Date(p.created_at).toLocaleString();
+  const closesAt = p.closes_at ? new Date(p.closes_at) : null;
+  const closed = closesAt && !isNaN(closesAt.getTime()) && closesAt < new Date();
 
   card.innerHTML = `
-    <h3></h3>
+    <h3 class="font-heading"></h3>
     <p class="prompt-body"></p>
-    <p class="muted small">from <span class="prompt-teacher"></span> · <span class="prompt-time"></span></p>
+    <div class="prompt-meta">
+      <span class="meta-item"><span class="meta-label">From</span> <span class="prompt-teacher"></span></span>
+      <span class="meta-item"><span class="meta-label">Published</span> <span class="prompt-time"></span></span>
+      <span class="meta-item closes-meta" hidden><span class="meta-label closes-label">Closes</span> <span class="prompt-closes"></span></span>
+    </div>
 
     <div class="responses"></div>
 
-    <form class="response-form">
+    <form class="response-form" ${closed ? 'hidden' : ''}>
       <label>
         Your response
         <textarea rows="4" required placeholder="Type your response..."></textarea>
@@ -70,14 +76,27 @@ function renderPromptCard(p) {
       <button type="submit" class="btn btn-primary">Submit response</button>
       <p class="result muted small" aria-live="polite"></p>
     </form>
+    ${closed ? '<p class="closed-banner">This assignment has closed. New submissions are no longer accepted.</p>' : ''}
   `;
   card.querySelector('h3').textContent = p.title || '(untitled)';
   card.querySelector('.prompt-body').textContent = p.body || '';
   card.querySelector('.prompt-teacher').textContent = p.teacher_email;
   card.querySelector('.prompt-time').textContent = created;
 
+  if (closesAt && !isNaN(closesAt.getTime())) {
+    const closesMeta = card.querySelector('.closes-meta');
+    closesMeta.hidden = false;
+    closesMeta.querySelector('.prompt-closes').textContent = closesAt.toLocaleString();
+    if (closed) {
+      closesMeta.classList.add('closed');
+      closesMeta.querySelector('.closes-label').textContent = 'Closed';
+    }
+  }
+
   renderResponsesInCard(card, p.id);
-  card.querySelector('.response-form').addEventListener('submit', (e) => submitResponse(e, p.id, card));
+  if (!closed) {
+    card.querySelector('.response-form').addEventListener('submit', (e) => submitResponse(e, p.id, card));
+  }
 
   return card;
 }
