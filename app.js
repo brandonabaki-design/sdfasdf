@@ -103,6 +103,17 @@ function renderResponsesInCard(card, promptId) {
     bubble.querySelector('.response-body').textContent = r.body;
     bubble.querySelector('.response-time').textContent = new Date(r.created_at).toLocaleString();
     container.appendChild(bubble);
+
+    if (r.ai_feedback) {
+      const fb = document.createElement('div');
+      fb.className = 'ai-feedback';
+      fb.innerHTML = `
+        <p class="ai-label small">AI feedback</p>
+        <p class="ai-body"></p>
+      `;
+      fb.querySelector('.ai-body').textContent = r.ai_feedback;
+      container.appendChild(fb);
+    }
   }
 }
 
@@ -117,7 +128,7 @@ async function submitResponse(event, promptId, card) {
   if (!body) return;
 
   button.disabled = true;
-  result.textContent = 'Submitting...';
+  result.textContent = 'Submitting and getting AI feedback...';
 
   try {
     const data = await api('submit_response', { prompt_id: promptId, body });
@@ -125,13 +136,12 @@ async function submitResponse(event, promptId, card) {
       result.textContent = `Error: ${data.error || 'unknown'}`;
       return;
     }
-    result.textContent = 'Submitted.';
+    allResponses.push(data.response);
+    result.textContent = data.response.ai_feedback
+      ? 'Submitted. AI feedback below.'
+      : 'Submitted. (AI feedback unavailable — check GEMINI_API_KEY.)';
     textarea.value = '';
-    const refreshed = await api('list_my_responses');
-    if (refreshed.ok) {
-      allResponses = refreshed.responses;
-      renderResponsesInCard(card, promptId);
-    }
+    renderResponsesInCard(card, promptId);
   } catch (err) {
     result.textContent = `Network error: ${err.message}`;
   } finally {

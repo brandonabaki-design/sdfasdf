@@ -124,4 +124,20 @@ form textarea { resize: vertical; }
 .response-bubble .response-body { margin: 0 0 4px; white-space: pre-wrap; }
 .response-bubble .response-time { margin: 0; }
 
+.ai-feedback {
+  background: #fef9c3;
+  border-left: 3px solid #ca8a04;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 4px 0 10px 16px;
+}
+.ai-feedback .ai-label {
+  margin: 0 0 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #854d0e;
+}
+.ai-feedback .ai-body { margin: 0; white-space: pre-wrap; }
+
 a { color: var(--accent); }

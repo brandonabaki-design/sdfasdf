@@ -10,7 +10,13 @@ const PROMPTS_SHEET = 'Prompts';
 const RESPONSES_SHEET = 'Responses';
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status'];
-const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body'];
+const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model'];
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const FEEDBACK_SYSTEM_PROMPT =
+  "You are a supportive teacher reviewing a student's response to a class prompt. " +
+  "Give brief, specific feedback (2-4 sentences). Highlight one thing they did well " +
+  "and one concrete next step to improve. Speak to the student in the second person, " +
+  "warmly but specifically. No lists or headings — just plain prose.";
 
 function doPost(e) {
   try {
@@ -149,7 +155,26 @@ function submitResponse_(claims, promptId, body) {
     promptId,
     prompt.title,
     body,
+    '',
+    '',
+    '',
   ]);
+  const rowIndex = sheet.getLastRow();
+
+  let aiFeedback = '';
+  let aiReviewedAt = '';
+  let aiModel = '';
+  try {
+    const review = getGeminiFeedback_(prompt, body);
+    aiFeedback = review.feedback;
+    aiModel = review.model;
+    const reviewedDate = new Date();
+    aiReviewedAt = reviewedDate.toISOString();
+    sheet.getRange(rowIndex, 9, 1, 3).setValues([[aiFeedback, reviewedDate, aiModel]]);
+  } catch (err) {
+    Logger.log('Gemini feedback failed: ' + err);
+  }
+
   return {
     id,
     created_at: createdAt.toISOString(),
@@ -157,7 +182,52 @@ function submitResponse_(claims, promptId, body) {
     prompt_id: promptId,
     prompt_title: prompt.title,
     body,
+    ai_feedback: aiFeedback,
+    ai_reviewed_at: aiReviewedAt,
+    ai_model: aiModel,
   };
+}
+
+function getGeminiFeedback_(prompt, responseBody) {
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+  const model = props.getProperty('GEMINI_MODEL') || DEFAULT_GEMINI_MODEL;
+
+  const userText =
+    'Prompt title: ' + (prompt.title || '(untitled)') + '\n\n' +
+    'Prompt:\n' + (prompt.body || '') + '\n\n' +
+    'Student response:\n' + responseBody;
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(model) + ':generateContent?key=' +
+              encodeURIComponent(apiKey);
+
+  const requestBody = {
+    systemInstruction: { parts: [{ text: FEEDBACK_SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
+  };
+
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(requestBody),
+    muteHttpExceptions: true,
+  });
+
+  const code = res.getResponseCode();
+  if (code !== 200) {
+    throw new Error('Gemini API ' + code + ': ' + res.getContentText().slice(0, 200));
+  }
+
+  const data = JSON.parse(res.getContentText());
+  const text =
+    data.candidates && data.candidates[0] && data.candidates[0].content &&
+    data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+    data.candidates[0].content.parts[0].text;
+  if (!text) throw new Error('Empty Gemini response');
+  return { feedback: String(text).trim(), model };
 }
 
 function listResponsesForStudent_(googleSub) {
@@ -173,6 +243,9 @@ function listResponsesForStudent_(googleSub) {
       prompt_id: r[5],
       prompt_title: r[6],
       body: r[7],
+      ai_feedback: r[8] || '',
+      ai_reviewed_at: r[9] instanceof Date ? r[9].toISOString() : (r[9] ? String(r[9]) : ''),
+      ai_model: r[10] || '',
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
@@ -208,8 +281,18 @@ function getOrCreateSheet_(name, headers) {
     sheet = ss.insertSheet(name);
     sheet.appendRow(headers);
     sheet.setFrozenRows(1);
+  } else {
+    ensureHeaders_(sheet, headers);
   }
   return sheet;
+}
+
+function ensureHeaders_(sheet, expectedHeaders) {
+  const lastCol = sheet.getLastColumn();
+  if (lastCol >= expectedHeaders.length) return;
+  const startCol = lastCol + 1;
+  const newCols = expectedHeaders.slice(lastCol);
+  sheet.getRange(1, startCol, 1, newCols.length).setValues([newCols]);
 }
 
 function getSheetUrl_() {
