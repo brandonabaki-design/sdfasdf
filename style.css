@@ -106,4 +106,22 @@ form textarea { resize: vertical; }
 }
 .prompt-card .prompt-body { white-space: pre-wrap; margin: 0 0 8px; }
 
+.response-form {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.response-form label { font-weight: 600; font-size: 14px; }
+.response-form .result { min-height: 1.2em; margin-top: 6px; }
+
+.responses { margin-top: 8px; }
+.response-bubble {
+  background: var(--tag-bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 6px 0;
+}
+.response-bubble .response-body { margin: 0 0 4px; white-space: pre-wrap; }
+.response-bubble .response-time { margin: 0; }
+
 a { color: var(--accent); }

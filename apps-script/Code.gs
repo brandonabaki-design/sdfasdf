@@ -7,8 +7,10 @@
 const ALLOWED_HD = 'aisa.sch.ae';
 const EVENTS_SHEET = 'StudentEvents';
 const PROMPTS_SHEET = 'Prompts';
+const RESPONSES_SHEET = 'Responses';
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status'];
+const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body'];
 
 function doPost(e) {
   try {
@@ -39,6 +41,15 @@ function doPost(e) {
           ok: true,
           prompt: createPrompt_(claims.email, payload.title || '', payload.body || ''),
         });
+
+      case 'submit_response':
+        return jsonOut_({
+          ok: true,
+          response: submitResponse_(claims, payload.prompt_id || '', payload.body || ''),
+        });
+
+      case 'list_my_responses':
+        return jsonOut_({ ok: true, responses: listResponsesForStudent_(claims.sub) });
 
       case 'im_here':
         return jsonOut_(logEvent_(claims, 'im_here', payload.clientTimestamp || ''));
@@ -101,6 +112,67 @@ function listActivePrompts_() {
       title: r[3],
       body: r[4],
       status: r[5],
+    }))
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
+function getPromptById_(promptId) {
+  const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const values = sheet.getRange(2, 1, lastRow - 1, PROMPTS_HEADERS.length).getValues();
+  for (const r of values) {
+    if (r[0] === promptId) {
+      return { id: r[0], created_at: r[1], teacher_email: r[2], title: r[3], body: r[4], status: r[5] };
+    }
+  }
+  return null;
+}
+
+function submitResponse_(claims, promptId, body) {
+  if (!promptId) throw new Error('prompt_id is required');
+  if (!String(body).trim()) throw new Error('response is empty');
+
+  const prompt = getPromptById_(promptId);
+  if (!prompt) throw new Error('prompt not found');
+  if (String(prompt.status).toLowerCase() !== 'active') throw new Error('prompt is not active');
+
+  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const id = Utilities.getUuid();
+  const createdAt = new Date();
+  sheet.appendRow([
+    id,
+    createdAt,
+    claims.email,
+    claims.name || '',
+    claims.sub,
+    promptId,
+    prompt.title,
+    body,
+  ]);
+  return {
+    id,
+    created_at: createdAt.toISOString(),
+    student_email: claims.email,
+    prompt_id: promptId,
+    prompt_title: prompt.title,
+    body,
+  };
+}
+
+function listResponsesForStudent_(googleSub) {
+  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
+  return values
+    .filter(r => r[4] === googleSub)
+    .map(r => ({
+      id: r[0],
+      created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+      prompt_id: r[5],
+      prompt_title: r[6],
+      body: r[7],
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
