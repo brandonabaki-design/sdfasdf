@@ -51,23 +51,112 @@ async function loadPrompts() {
     }
     list.innerHTML = '';
     for (const p of data.prompts) {
-      const card = document.createElement('article');
-      card.className = 'prompt-card';
-      const created = new Date(p.created_at).toLocaleString();
-      card.innerHTML = `
-        <h3></h3>
-        <p class="prompt-body"></p>
-        <p class="muted small">from <span class="prompt-teacher"></span> · <span class="prompt-time"></span></p>
-      `;
-      card.querySelector('h3').textContent = p.title || '(untitled)';
-      card.querySelector('.prompt-body').textContent = p.body || '';
-      card.querySelector('.prompt-teacher').textContent = p.teacher_email;
-      card.querySelector('.prompt-time').textContent = created;
-      list.appendChild(card);
+      list.appendChild(renderTeacherPromptCard(p));
     }
   } catch (err) {
     list.textContent = `Network error: ${err.message}`;
   }
+}
+
+function renderTeacherPromptCard(p) {
+  const card = document.createElement('article');
+  card.className = 'prompt-card teacher-prompt-card';
+  card.dataset.promptId = p.id;
+  const created = new Date(p.created_at).toLocaleString();
+
+  card.innerHTML = `
+    <header class="prompt-header">
+      <h3></h3>
+      <p class="prompt-body"></p>
+      <p class="muted small">from <span class="prompt-teacher"></span> · <span class="prompt-time"></span></p>
+      <button type="button" class="link toggle-responses">Show responses</button>
+    </header>
+    <div class="responses-panel" hidden>
+      <p class="muted small responses-status">Loading...</p>
+      <div class="responses-list"></div>
+    </div>
+  `;
+  card.querySelector('h3').textContent = p.title || '(untitled)';
+  card.querySelector('.prompt-body').textContent = p.body || '';
+  card.querySelector('.prompt-teacher').textContent = p.teacher_email;
+  card.querySelector('.prompt-time').textContent = created;
+
+  const toggleBtn = card.querySelector('.toggle-responses');
+  const panel = card.querySelector('.responses-panel');
+  toggleBtn.addEventListener('click', async () => {
+    if (panel.hidden) {
+      panel.hidden = false;
+      toggleBtn.textContent = 'Refresh responses';
+      await loadResponsesForPrompt(card, p.id);
+    } else {
+      panel.hidden = true;
+      toggleBtn.textContent = 'Show responses';
+    }
+  });
+
+  return card;
+}
+
+async function loadResponsesForPrompt(card, promptId) {
+  const status = card.querySelector('.responses-status');
+  const list = card.querySelector('.responses-list');
+  status.textContent = 'Loading...';
+  list.innerHTML = '';
+  try {
+    const data = await api('list_responses_for_prompt', { prompt_id: promptId });
+    if (!data.ok) {
+      status.textContent = `Couldn't load: ${data.error}`;
+      return;
+    }
+    if (data.responses.length === 0) {
+      status.textContent = 'No responses yet.';
+      return;
+    }
+    const flagged = data.responses.filter(r => r.flagged).length;
+    status.textContent = `${data.responses.length} response${data.responses.length === 1 ? '' : 's'}` +
+      (flagged ? ` · ${flagged} flagged` : '');
+    for (const r of data.responses) {
+      list.appendChild(renderTeacherResponseCard(r));
+    }
+  } catch (err) {
+    status.textContent = `Network error: ${err.message}`;
+  }
+}
+
+function renderTeacherResponseCard(r) {
+  const card = document.createElement('div');
+  card.className = 'teacher-response-card' + (r.flagged ? ' flagged' : '');
+  const submitted = new Date(r.created_at).toLocaleString();
+
+  const feedbackHtml = r.ai_feedback
+    ? (r.flagged
+        ? `<div class="resource-note"><p class="ai-body"></p></div>`
+        : `<div class="ai-feedback"><p class="ai-label small">AI feedback shown to student</p><p class="ai-body"></p></div>`)
+    : '';
+
+  card.innerHTML = `
+    ${r.flagged ? '<p class="flag-banner"></p>' : ''}
+    <p class="student-header">
+      <strong class="student-name"></strong>
+      <span class="muted small"> &lt;<span class="student-email"></span>&gt;</span>
+      <span class="muted small"> · <span class="submission-time"></span></span>
+    </p>
+    <p class="response-body"></p>
+    ${feedbackHtml}
+  `;
+
+  if (r.flagged) {
+    card.querySelector('.flag-banner').textContent = 'FLAGGED — ' + (r.flag_reason || 'review needed');
+  }
+  card.querySelector('.student-name').textContent = r.student_name || '(no name)';
+  card.querySelector('.student-email').textContent = r.student_email;
+  card.querySelector('.submission-time').textContent = submitted;
+  card.querySelector('.response-body').textContent = r.body;
+  if (r.ai_feedback) {
+    card.querySelector('.ai-body').textContent = r.ai_feedback;
+  }
+
+  return card;
 }
 
 async function submitPrompt(event) {

@@ -61,6 +61,10 @@ function doPost(e) {
           prompt: createPrompt_(claims.email, payload.title || '', payload.body || ''),
         });
 
+      case 'list_responses_for_prompt':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, responses: listResponsesForPrompt_(payload.prompt_id || '') });
+
       case 'submit_response':
         return jsonOut_({
           ok: true,
@@ -335,6 +339,32 @@ function getGeminiReview_(prompt, responseBody) {
     distress_reason: String(parsed.distress_reason || '').trim(),
     model,
   };
+}
+
+function listResponsesForPrompt_(promptId) {
+  if (!promptId) return [];
+  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
+  return values
+    .filter(r => r[5] === promptId)
+    .map(r => ({
+      id: r[0],
+      created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+      student_email: r[2],
+      student_name: r[3],
+      body: r[7],
+      ai_feedback: r[8] || '',
+      ai_reviewed_at: r[9] instanceof Date ? r[9].toISOString() : (r[9] ? String(r[9]) : ''),
+      ai_model: r[10] || '',
+      flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
+      flag_reason: r[12] || '',
+    }))
+    .sort((a, b) => {
+      if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
+      return a.created_at < b.created_at ? 1 : -1;
+    });
 }
 
 function listResponsesForStudent_(googleSub) {

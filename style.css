@@ -149,4 +149,41 @@ form textarea { resize: vertical; }
 }
 .resource-note .ai-body { margin: 0; white-space: pre-wrap; color: #334155; }
 
+.teacher-prompt-card .prompt-header .toggle-responses { margin-top: 8px; }
+
+.responses-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.responses-status { margin: 0 0 8px; }
+
+.teacher-response-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 8px 0;
+  background: #fff;
+}
+.teacher-response-card.flagged {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+.teacher-response-card .student-header { margin: 0 0 6px; font-size: 14px; }
+.teacher-response-card .response-body {
+  margin: 6px 0 8px;
+  white-space: pre-wrap;
+  background: #f8fafc;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.flag-banner {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #b91c1c;
+  text-transform: uppercase;
+}
+
 a { color: var(--accent); }
