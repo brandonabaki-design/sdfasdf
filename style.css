@@ -2380,7 +2380,180 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 
 /* ============================================================
-   Dashboard
+   Student progress dashboard
+   ============================================================ */
+
+.progress-header { align-items: flex-end; }
+.hello-line { margin: 0 0 4px; font-family: var(--font-mono); }
+.stat-icon {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 24px;
+  vertical-align: -2px;
+}
+.stat-num { display: inline-block; }
+
+/* Heatmap */
+.heatmap-wrap { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.heatmap {
+  display: flex;
+  gap: 6px;
+  padding: 2px;
+}
+.heat-col { display: flex; flex-direction: column; gap: 6px; }
+.heatmap-cell {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.15s;
+}
+.heatmap-cell:hover { transform: scale(1.2); border-color: rgba(255, 255, 255, 0.20); }
+.heatmap-cell.l0 { background: rgba(255, 255, 255, 0.05); }
+.heatmap-cell.l1 { background: rgba(99, 102, 241, 0.30); border-color: rgba(99, 102, 241, 0.40); }
+.heatmap-cell.l2 { background: rgba(99, 102, 241, 0.55); border-color: rgba(99, 102, 241, 0.60); }
+.heatmap-cell.l3 { background: rgba(129, 140, 248, 0.80); border-color: rgba(129, 140, 248, 0.85); }
+.heatmap-cell.l4 { background: linear-gradient(135deg, var(--indigo), var(--violet)); border-color: var(--violet); box-shadow: 0 0 8px rgba(168, 85, 247, 0.6); }
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.heatmap-cell.legend { width: 14px; height: 14px; }
+
+@media (max-width: 640px) {
+  .heatmap-cell { width: 14px; height: 14px; }
+  .heatmap { gap: 4px; }
+  .heat-col { gap: 4px; }
+}
+
+/* Achievements */
+.achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.achievement-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: all 0.2s;
+}
+.achievement-card.earned {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.08));
+  border-color: rgba(168, 85, 247, 0.40);
+}
+.achievement-card.locked { opacity: 0.55; }
+.achievement-card.earned:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px -12px rgba(168, 85, 247, 0.5);
+}
+.achievement-emoji {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.achievement-card.earned .achievement-emoji {
+  background: linear-gradient(135deg, var(--indigo), var(--violet));
+  border-color: var(--violet);
+  box-shadow: 0 6px 16px -6px rgba(168, 85, 247, 0.5);
+}
+.achievement-text { flex: 1; min-width: 0; }
+.achievement-label { font-weight: 700; font-size: 14px; margin: 0; color: var(--text); }
+.achievement-desc { margin: 2px 0 0; line-height: 1.4; }
+.achievement-status {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.achievement-card.earned .achievement-status {
+  background: rgba(168, 85, 247, 0.20);
+  border-color: rgba(168, 85, 247, 0.40);
+  color: #d8b4fe;
+}
+
+/* Feedback stack */
+.feedback-stack { display: flex; flex-direction: column; gap: 12px; }
+.feedback-card {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.10), rgba(245, 158, 11, 0.02));
+  border: 1px solid rgba(245, 158, 11, 0.30);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.feedback-meta { margin: 0 0 6px; }
+.feedback-meta .feedback-on { color: white; }
+.feedback-time { font-family: var(--font-mono); }
+.feedback-body { margin: 0; line-height: 1.6; white-space: pre-wrap; color: var(--text); }
+
+/* Per-prompt progress list */
+.prompt-progress-list { display: flex; flex-direction: column; gap: 8px; }
+.progress-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.progress-row.completed { opacity: 0.65; }
+.progress-row.completed .progress-title { text-decoration: line-through; color: var(--text-muted); }
+.progress-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 700;
+}
+.progress-row.completed .progress-check {
+  background: var(--emerald);
+  border-color: var(--emerald);
+  color: white;
+}
+.progress-info { min-width: 0; }
+.progress-title { margin: 0; font-size: 14px; font-weight: 600; }
+.progress-meta { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; flex-wrap: wrap; }
+.progress-meta .dot { color: var(--text-dim); }
+.progress-teacher { font-family: var(--font-mono); }
+.progress-counts { text-align: right; }
+.progress-count { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.progress-last { margin: 2px 0 0; font-family: var(--font-mono); }
+
+@media (max-width: 640px) {
+  .progress-row { grid-template-columns: 30px 1fr; }
+  .progress-counts { grid-column: 1 / -1; text-align: left; padding-left: 44px; }
+}
+
+/* ============================================================
+   Dashboard (teacher)
    ============================================================ */
 
 .stats-grid {

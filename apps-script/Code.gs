@@ -142,6 +142,9 @@ function doPost(e) {
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, dashboard: getTeacherDashboard_(claims) });
 
+      case 'get_student_dashboard':
+        return jsonOut_({ ok: true, dashboard: getStudentDashboard_(claims) });
+
       case 'export_csv':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, csv: exportCsv_(claims, payload.kind || 'responses'), kind: payload.kind || 'responses' });
@@ -482,6 +485,168 @@ function getMyPromptRows_(claims) {
   if (lastRow < 2) return [];
   const values = sheet.getRange(2, 1, lastRow - 1, PROMPTS_HEADERS.length).getValues();
   return values.filter(r => String(r[2]).toLowerCase() === myEmail);
+}
+
+function getStudentDashboard_(claims) {
+  const sub = claims.sub;
+  const myEmail = String(claims.email || '').toLowerCase();
+
+  // Pull this student's own responses.
+  const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const respLast = respSheet.getLastRow();
+  const myResponses = [];
+  if (respLast >= 2) {
+    const values = respSheet.getRange(2, 1, respLast - 1, RESPONSES_HEADERS.length).getValues();
+    for (const r of values) {
+      if (r[4] !== sub) continue;
+      myResponses.push({
+        id: r[0],
+        created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+        prompt_id: r[5],
+        prompt_title: r[6],
+        body: r[7],
+        ai_feedback: r[8] || '',
+        flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
+        response_type: String(r[14] || 'open').toLowerCase(),
+        option_index: parseInt(r[15], 10) || null,
+        rating_value: parseInt(r[16], 10) || null,
+      });
+    }
+  }
+
+  // Active prompts addressed to this student.
+  const promptsSheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
+  const promptsLast = promptsSheet.getLastRow();
+  const availablePrompts = [];
+  if (promptsLast >= 2) {
+    const values = promptsSheet.getRange(2, 1, promptsLast - 1, PROMPTS_HEADERS.length).getValues();
+    for (const r of values) {
+      if (String(r[5]).toLowerCase() !== 'active') continue;
+      const audience = String(r[7] || '').trim().toLowerCase();
+      const allowedToAll = !audience || audience === 'all' || audience === 'everyone';
+      if (!allowedToAll) {
+        const list = audience.split(/[,;\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+        if (list.indexOf(myEmail) === -1) continue;
+      }
+      availablePrompts.push({
+        id: r[0],
+        title: r[3],
+        type: String(r[9] || 'open').toLowerCase(),
+        teacher_email: r[2],
+        created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+      });
+    }
+  }
+
+  // Completions
+  const completedIds = getCompletedPromptIdsForUser_(sub);
+
+  // Per-day activity (UTC date keys YYYY-MM-DD) for streak + heatmap
+  const responsesByDay = {};
+  for (const r of myResponses) {
+    const key = String(r.created_at).slice(0, 10);
+    responsesByDay[key] = (responsesByDay[key] || 0) + 1;
+  }
+
+  // Current streak: consecutive days ending today (or yesterday if today is empty).
+  let streak = 0;
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(start);
+    d.setUTCDate(d.getUTCDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    if (responsesByDay[key]) {
+      streak++;
+    } else if (i === 0) {
+      // Today empty — that's allowed; keep going to count yesterday's streak.
+      continue;
+    } else {
+      break;
+    }
+  }
+
+  // 63-day heatmap (9 weeks × 7 days), oldest first
+  const heatmap = [];
+  const heatStart = new Date(start);
+  heatStart.setUTCDate(heatStart.getUTCDate() - 62);
+  for (let i = 0; i < 63; i++) {
+    const d = new Date(heatStart);
+    d.setUTCDate(d.getUTCDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    heatmap.push({ date: key, count: responsesByDay[key] || 0 });
+  }
+
+  // Per-prompt progress
+  const respByPrompt = {};
+  for (const r of myResponses) {
+    if (!respByPrompt[r.prompt_id]) respByPrompt[r.prompt_id] = [];
+    respByPrompt[r.prompt_id].push(r);
+  }
+  const promptProgress = availablePrompts.map(p => {
+    const rs = respByPrompt[p.id] || [];
+    rs.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+    return {
+      id: p.id,
+      title: p.title,
+      type: p.type,
+      teacher_email: p.teacher_email,
+      response_count: rs.length,
+      last_response_at: rs.length ? rs[rs.length - 1].created_at : null,
+      completed: completedIds.has(p.id),
+    };
+  });
+
+  // Recent AI feedback (open-response only — only those have AI text)
+  const feedbackEntries = myResponses
+    .filter(r => r.ai_feedback && r.response_type === 'open' && !r.flagged)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .slice(0, 5)
+    .map(r => ({
+      created_at: r.created_at,
+      prompt_title: r.prompt_title,
+      feedback: r.ai_feedback,
+    }));
+
+  // Ratings the student has given themselves
+  const ratingResponses = myResponses.filter(r => r.response_type === 'rating' && r.rating_value);
+  const avgRating = ratingResponses.length
+    ? Math.round((ratingResponses.reduce((sum, r) => sum + r.rating_value, 0) / ratingResponses.length) * 10) / 10
+    : null;
+
+  const totalResponses = myResponses.length;
+  const pendingCount = promptProgress.filter(p => !p.completed).length;
+  const totalAvailable = availablePrompts.length;
+
+  // Achievements
+  const achievements = [
+    { id: 'first', label: 'First response', emoji: '🎉', desc: 'Submitted your first response', earned: totalResponses >= 1 },
+    { id: 'five', label: 'Off the ground', emoji: '🌱', desc: '5 responses submitted', earned: totalResponses >= 5 },
+    { id: 'twentyfive', label: 'Regular voice', emoji: '📚', desc: '25 responses submitted', earned: totalResponses >= 25 },
+    { id: 'streak3', label: 'On a roll', emoji: '🔥', desc: '3-day activity streak', earned: streak >= 3 },
+    { id: 'streak7', label: 'Week strong', emoji: '💪', desc: '7-day activity streak', earned: streak >= 7 },
+    { id: 'allcaught', label: 'All caught up', emoji: '⭐', desc: 'No assignments pending', earned: totalAvailable > 0 && pendingCount === 0 },
+  ];
+
+  return {
+    summary: {
+      total_responses: totalResponses,
+      total_available: totalAvailable,
+      completed_count: completedIds.size,
+      pending_count: pendingCount,
+      streak,
+      avg_rating: avgRating,
+    },
+    heatmap,
+    achievements,
+    prompt_progress: promptProgress.sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      const aLast = a.last_response_at || '';
+      const bLast = b.last_response_at || '';
+      return aLast < bLast ? 1 : -1;
+    }),
+    recent_feedback: feedbackEntries,
+  };
 }
 
 function getTeacherDashboard_(claims) {

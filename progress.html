@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AISA Hub · My Progress</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-blobs" aria-hidden="true">
+    <div class="bg-blob b1"></div>
+    <div class="bg-blob b2"></div>
+    <div class="bg-blob b3"></div>
+  </div>
+
+  <nav class="topbar">
+    <a href="index.html" class="brand">
+      <span class="brand-mark" aria-hidden="true">🦁</span>
+      <span class="brand-text">
+        <span class="brand-name">AISA</span>
+        <span class="brand-sub">My Progress</span>
+      </span>
+    </a>
+
+    <div class="topbar-meta">
+      <a href="index.html" class="btn btn-ghost">← Home</a>
+      <span id="user-chip" class="user-chip">
+        <span class="user-dot"></span>
+        <span id="user-name"></span>
+        <span class="muted">·</span>
+        <span id="user-email"></span>
+      </span>
+      <button id="sign-out" class="btn btn-ghost">Sign out</button>
+    </div>
+  </nav>
+
+  <main class="container container-wide">
+    <section id="signin-container" class="hero">
+      <div class="hero-content">
+        <h1 class="hero-title font-heading">
+          <span class="gradient-amber">Your progress</span>
+        </h1>
+        <p class="hero-subtitle">
+          See your activity, streaks, badges, and every piece of AI feedback you've earned.
+        </p>
+        <p id="status" class="hero-status">
+          Sign in with your <strong>aisa.sch.ae</strong> account to continue.
+        </p>
+        <div class="signin-wrap">
+          <div id="g-signin-button"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="signed-in" hidden>
+      <header class="page-header progress-header">
+        <div>
+          <p class="hello-line muted small">Hi <span id="hello-name"></span> — here's your progress</p>
+          <h2 class="page-title font-heading">Your progress</h2>
+        </div>
+        <button type="button" class="btn btn-ghost" id="refresh-btn">Refresh</button>
+      </header>
+
+      <section id="loading" class="role-loading">Loading...</section>
+
+      <section id="dashboard-content" hidden>
+        <!-- KPI cards -->
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <!-- Activity heatmap -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Last 9 weeks of activity</h2>
+            <p class="panel-subtitle">Each square is a day — brighter means more responses.</p>
+          </header>
+          <div class="heatmap-wrap">
+            <div class="heatmap" id="heatmap" role="img" aria-label="Activity heatmap"></div>
+            <div class="heatmap-legend">
+              <span class="muted small">Less</span>
+              <span class="heatmap-cell legend l0"></span>
+              <span class="heatmap-cell legend l1"></span>
+              <span class="heatmap-cell legend l2"></span>
+              <span class="heatmap-cell legend l3"></span>
+              <span class="heatmap-cell legend l4"></span>
+              <span class="muted small">More</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Achievements -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Achievements</h2>
+            <p class="panel-subtitle">Earn badges for staying engaged.</p>
+          </header>
+          <div class="achievements-grid" id="achievements-grid"></div>
+        </div>
+
+        <!-- Recent AI feedback -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Recent AI feedback</h2>
+            <p class="panel-subtitle">The last few pieces of feedback you've received.</p>
+          </header>
+          <div class="feedback-stack" id="feedback-stack"></div>
+        </div>
+
+        <!-- Per-prompt progress -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Per-prompt progress</h2>
+            <p class="panel-subtitle">Pending prompts first, then completed.</p>
+          </header>
+          <div class="prompt-progress-list" id="prompt-progress-list"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <a href="index.html" class="footer-link">← Home</a>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="progress.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
+</body>
+</html>
