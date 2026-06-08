@@ -547,24 +547,27 @@ async function refreshCheckoutState() {
   } catch (err) { /* silent */ }
 }
 
+function hasValidActiveCheckout() {
+  // Guard: a row with empty destination is treated as no checkout
+  // (defends against stale rows left behind by earlier testing).
+  return !!(activeCheckout && String(activeCheckout.destination || '').trim());
+}
+
 function renderCheckoutState() {
-  const card = document.getElementById('checkout-card');
-  const idle = document.getElementById('checkout-idle');
-  const active = document.getElementById('checkout-active');
-  if (!idle || !active || !card) return;
-  if (activeCheckout) {
-    card.classList.add('is-active');
-    idle.hidden = true;
-    active.hidden = false;
-    document.getElementById('checkout-destination-active').textContent = activeCheckout.destination;
-    document.getElementById('checkout-teacher-active').textContent = activeCheckout.teacher_email;
+  const btn = document.getElementById('step-out-btn');
+  if (!btn) return;
+  const labelEl = btn.querySelector('.step-out-label');
+
+  if (hasValidActiveCheckout()) {
+    btn.classList.add('is-active');
+    btn.setAttribute('aria-label', `Currently out at ${activeCheckout.destination}`);
     updateSinceTimer();
     if (checkoutTimerId) clearInterval(checkoutTimerId);
     checkoutTimerId = setInterval(updateSinceTimer, 30000);
   } else {
-    card.classList.remove('is-active');
-    idle.hidden = false;
-    active.hidden = true;
+    btn.classList.remove('is-active');
+    btn.setAttribute('aria-label', 'Step out of class');
+    if (labelEl) labelEl.textContent = 'Step out';
     if (checkoutTimerId) {
       clearInterval(checkoutTimerId);
       checkoutTimerId = null;
@@ -573,21 +576,61 @@ function renderCheckoutState() {
 }
 
 function updateSinceTimer() {
-  if (!activeCheckout) return;
-  const el = document.getElementById('checkout-since');
-  if (!el) return;
+  if (!hasValidActiveCheckout()) return;
   const start = new Date(activeCheckout.checked_out_at);
   const mins = Math.max(0, Math.round((Date.now() - start.getTime()) / 60000));
-  el.textContent = mins === 0 ? 'just now' : `${mins} min${mins === 1 ? '' : 's'} ago`;
+  const friendly = mins === 0 ? 'just now' : `${mins} min${mins === 1 ? '' : 's'} ago`;
+  const sinceEl = document.getElementById('checkout-since');
+  if (sinceEl) sinceEl.textContent = friendly;
+  const btnLabel = document.querySelector('#step-out-btn .step-out-label');
+  if (btnLabel) {
+    btnLabel.textContent = mins === 0 ? 'Out · just now' : `Out · ${mins}m`;
+  }
 }
 
-function openCheckoutModal(destination) {
-  if (activeCheckout) return;
-  checkoutPendingDestination = destination;
+function openCheckoutModal() {
   const modal = document.getElementById('checkout-modal');
-  document.getElementById('checkout-modal-heading').textContent = `Check out — ${destination}`;
-  document.getElementById('checkout-modal-destination').textContent = destination;
-  modalOpen(modal, '#checkout-teacher-select');
+  const idle = document.getElementById('checkout-modal-idle');
+  const active = document.getElementById('checkout-modal-active');
+  const heading = document.getElementById('checkout-modal-heading');
+
+  if (hasValidActiveCheckout()) {
+    idle.hidden = true;
+    active.hidden = false;
+    heading.textContent = 'Currently out';
+    document.getElementById('checkout-destination-active').textContent = activeCheckout.destination;
+    document.getElementById('checkout-teacher-active').textContent = activeCheckout.teacher_email || '—';
+    updateSinceTimer();
+    document.getElementById('checkout-modal-active-result').textContent = '';
+  } else {
+    idle.hidden = false;
+    active.hidden = true;
+    heading.textContent = 'Step out';
+    // Reset form
+    document.querySelectorAll('input[name="dest"]').forEach(r => { r.checked = false; });
+    document.getElementById('checkout-notes').value = '';
+    document.getElementById('checkout-modal-result').textContent = '';
+  }
+
+  // Populate the teacher dropdown (in case it wasn't loaded yet).
+  const select = document.getElementById('checkout-teacher-select');
+  if (select && select.options.length === 0) {
+    if (teacherList.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = ''; opt.textContent = 'No teachers configured'; opt.disabled = true;
+      select.appendChild(opt);
+    } else {
+      for (const email of teacherList) {
+        const opt = document.createElement('option');
+        opt.value = email; opt.textContent = email;
+        select.appendChild(opt);
+      }
+    }
+  }
+
+  document.getElementById('checkout-modal-backdrop').hidden = false;
+  modal.hidden = false;
+  modalOpen(modal, hasValidActiveCheckout() ? '#checkin-btn' : 'input[name="dest"]');
 
   const select = document.getElementById('checkout-teacher-select');
   select.innerHTML = '';
@@ -614,14 +657,18 @@ function openCheckoutModal(destination) {
 }
 
 function closeCheckoutModal() {
-  checkoutPendingDestination = null;
   document.getElementById('checkout-modal-backdrop').hidden = true;
   document.getElementById('checkout-modal').hidden = true;
   modalClose();
 }
 
 async function submitCheckout() {
-  if (!checkoutPendingDestination) return;
+  const destEl = document.querySelector('input[name="dest"]:checked');
+  if (!destEl) {
+    document.getElementById('checkout-modal-result').textContent = 'Pick where you are going.';
+    return;
+  }
+  const destination = destEl.value;
   const teacherEmail = document.getElementById('checkout-teacher-select').value;
   const notes = document.getElementById('checkout-notes').value.trim();
   const result = document.getElementById('checkout-modal-result');
@@ -635,7 +682,7 @@ async function submitCheckout() {
   result.textContent = 'Notifying teacher...';
   try {
     const data = await api('check_out', {
-      destination: checkoutPendingDestination,
+      destination: destination,
       teacher_email: teacherEmail,
       notes: notes,
     });
@@ -657,20 +704,29 @@ async function submitCheckout() {
 async function submitCheckIn() {
   if (!activeCheckout) return;
   const btn = document.getElementById('checkin-btn');
+  const result = document.getElementById('checkout-modal-active-result');
   btn.disabled = true;
   const originalText = btn.textContent;
   btn.textContent = 'Checking in...';
+  if (result) result.textContent = '';
   try {
     const data = await api('check_in', { checkout_id: activeCheckout.id });
     if (data.ok) {
       activeCheckout = null;
       renderCheckoutState();
+      closeCheckoutModal();
       announce('Welcome back. Your check-in has been logged.');
     } else {
-      alert('Error: ' + (friendlyError(data.error)));
+      if (result) result.textContent = friendlyError(data.error);
+      // If the row was stale (no longer 'out' on the server), clear locally too.
+      if ((data.error || '').toLowerCase().includes('active checkout not found')) {
+        activeCheckout = null;
+        renderCheckoutState();
+        closeCheckoutModal();
+      }
     }
   } catch (err) {
-    alert('Network error: ' + err.message);
+    if (result) result.textContent = 'Network error: ' + err.message;
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
@@ -684,12 +740,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('assignments-close').addEventListener('click', closeAssignmentsPanel);
   document.getElementById('assignments-backdrop').addEventListener('click', closeAssignmentsPanel);
 
-  document.querySelectorAll('.checkout-chip').forEach(btn => {
-    btn.addEventListener('click', () => openCheckoutModal(btn.dataset.destination));
-  });
+  document.getElementById('step-out-btn').addEventListener('click', openCheckoutModal);
   document.getElementById('checkin-btn').addEventListener('click', submitCheckIn);
   document.getElementById('checkout-modal-close').addEventListener('click', closeCheckoutModal);
   document.getElementById('checkout-modal-cancel').addEventListener('click', closeCheckoutModal);
+  document.getElementById('checkout-active-cancel').addEventListener('click', closeCheckoutModal);
   document.getElementById('checkout-modal-backdrop').addEventListener('click', closeCheckoutModal);
   document.getElementById('checkout-modal-submit').addEventListener('click', submitCheckout);
 

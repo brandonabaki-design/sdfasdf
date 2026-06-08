@@ -47,6 +47,10 @@
 
     <div class="topbar-meta">
       <a href="progress.html" class="btn btn-ghost" id="progress-link">📊 My Progress</a>
+      <button id="step-out-btn" class="step-out-btn" type="button" aria-label="Step out of class">
+        <span class="step-out-icon" aria-hidden="true">🚪</span>
+        <span class="step-out-label">Step out</span>
+      </button>
       <button id="assignments-btn" class="assignments-btn empty" type="button">
         <span class="assignments-icon">📥</span>
         <span>Assignments</span>
@@ -127,59 +131,69 @@
       <p id="result" class="status-line" aria-live="polite"></p>
 
       <!-- Check out / check in (compact strip) -->
-      <section id="checkout-card" class="checkout-strip">
-        <div id="checkout-idle" class="checkout-idle">
-          <span class="checkout-strip-icon" aria-hidden="true">🚪</span>
-          <span class="checkout-strip-label">Need to step out?</span>
-          <div class="checkout-strip-options">
-            <button class="checkout-chip" data-destination="Bathroom" type="button">
-              <span aria-hidden="true">🚻</span> Bathroom
-            </button>
-            <button class="checkout-chip" data-destination="Nurse" type="button">
-              <span aria-hidden="true">⚕️</span> Nurse
-            </button>
-            <button class="checkout-chip" data-destination="Counsellor" type="button">
-              <span aria-hidden="true">💬</span> Counsellor
-            </button>
-          </div>
-        </div>
-        <div id="checkout-active" class="checkout-strip-active" hidden>
-          <span class="checkout-strip-icon" aria-hidden="true">🚪</span>
-          <span class="checkout-strip-active-text">
-            You're out at <strong id="checkout-destination-active"></strong>
-            <span class="muted"> · <span id="checkout-since"></span> · notified <span id="checkout-teacher-active"></span></span>
-          </span>
-          <button id="checkin-btn" class="btn btn-amber checkin-compact" type="button">Check back in</button>
-        </div>
-      </section>
+      <section id="checkout-card" class="checkout-strip" hidden></section>
 
       <div id="prompts-list" class="prompts-grid"></div>
     </section>
 
-    <!-- Check-out modal -->
+    <!-- Step-out modal (unified: picker + status) -->
     <div id="checkout-modal-backdrop" class="modal-backdrop" hidden></div>
     <div id="checkout-modal" class="modal" hidden role="dialog" aria-labelledby="checkout-modal-title">
       <header class="modal-header">
         <h2 id="checkout-modal-title" class="font-heading">
           <span class="panel-icon checkout-modal-icon" aria-hidden="true">🚪</span>
-          <span id="checkout-modal-heading">Check out</span>
+          <span id="checkout-modal-heading">Step out</span>
         </h2>
         <button class="modal-close" id="checkout-modal-close" aria-label="Close">×</button>
       </header>
       <div class="modal-body">
-        <p class="muted small">You're heading to <strong id="checkout-modal-destination"></strong>. Your teacher gets an email now and another when you check back in.</p>
-        <label>
-          Notify which teacher?
-          <select id="checkout-teacher-select"></select>
-        </label>
-        <label>
-          Notes <span class="field-hint">optional</span>
-          <input id="checkout-notes" type="text" maxlength="140" placeholder="e.g. feeling unwell, won't be long" />
-        </label>
-        <p id="checkout-modal-result" class="status-line" aria-live="polite"></p>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" id="checkout-modal-cancel" type="button">Cancel</button>
-          <button class="btn btn-primary" id="checkout-modal-submit" type="button">Send & check out</button>
+        <!-- Idle: pick destination + teacher + notes -->
+        <div id="checkout-modal-idle">
+          <p class="muted small">Pick a destination. Your teacher gets an email now and another when you check back in.</p>
+          <fieldset class="dest-fieldset">
+            <legend>Where are you going?</legend>
+            <label class="dest-option">
+              <input type="radio" name="dest" value="Bathroom" />
+              <span class="dest-pill"><span class="dest-emoji-modal" aria-hidden="true">🚻</span> Bathroom</span>
+            </label>
+            <label class="dest-option">
+              <input type="radio" name="dest" value="Nurse" />
+              <span class="dest-pill"><span class="dest-emoji-modal" aria-hidden="true">⚕️</span> Nurse</span>
+            </label>
+            <label class="dest-option">
+              <input type="radio" name="dest" value="Counsellor" />
+              <span class="dest-pill"><span class="dest-emoji-modal" aria-hidden="true">💬</span> Counsellor</span>
+            </label>
+          </fieldset>
+          <label>
+            Notify which teacher?
+            <select id="checkout-teacher-select"></select>
+          </label>
+          <label>
+            Notes <span class="field-hint">optional</span>
+            <input id="checkout-notes" type="text" maxlength="140" placeholder="e.g. feeling unwell, won't be long" />
+          </label>
+          <p id="checkout-modal-result" class="status-line" aria-live="polite"></p>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" id="checkout-modal-cancel" type="button">Cancel</button>
+            <button class="btn btn-primary" id="checkout-modal-submit" type="button">Send &amp; step out</button>
+          </div>
+        </div>
+        <!-- Active: status + check back in -->
+        <div id="checkout-modal-active" hidden>
+          <div class="checkout-status">
+            <p class="status-eyebrow">Currently checked out</p>
+            <h3 class="status-where">At <strong id="checkout-destination-active"></strong></h3>
+            <p class="muted status-meta">
+              <span id="checkout-since"></span>
+              · notified <span id="checkout-teacher-active"></span>
+            </p>
+          </div>
+          <p id="checkout-modal-active-result" class="status-line" aria-live="polite"></p>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" id="checkout-active-cancel" type="button">Close</button>
+            <button class="btn btn-amber" id="checkin-btn" type="button">Check back in</button>
+          </div>
         </div>
       </div>
     </div>

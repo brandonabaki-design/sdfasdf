@@ -416,7 +416,8 @@ body:not(.is-signed-in) #user-chip,
 body:not(.is-signed-in) #sign-out,
 body:not(.is-signed-in) #flagged-btn,
 body:not(.is-signed-in) #assignments-btn,
-body:not(.is-signed-in) #checkouts-btn { display: none !important; }
+body:not(.is-signed-in) #checkouts-btn,
+body:not(.is-signed-in) #step-out-btn { display: none !important; }
 
 /* ============================================================
    Out-now button + panel (teacher)
@@ -1393,93 +1394,106 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 
 /* ============================================================
-   Check out / check in — compact strip (quiet but accessible)
+   Step-out — topbar pill + modal flow
    ============================================================ */
 
-.checkout-strip {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px 16px;
-  margin-bottom: 22px;
-  box-shadow: var(--shadow-sm);
-}
-.checkout-idle {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.checkout-strip-icon {
-  font-size: 18px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.checkout-strip-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.checkout-strip-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: auto;
-}
-.checkout-chip {
+.step-out-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
+  gap: 8px;
+  padding: 8px 14px;
   border-radius: 999px;
-  color: var(--text);
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  color: #ffffff;
   font-family: inherit;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.2s ease;
 }
-.checkout-chip:hover {
-  background: var(--cyan-soft);
-  border-color: var(--cyan);
-  transform: translateY(-1px);
+.step-out-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.step-out-btn .step-out-icon { font-size: 15px; }
+.step-out-btn.is-active {
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  border-color: var(--gold-dark);
+  color: white;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.28);
+}
+.step-out-btn.is-active:hover {
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold));
 }
 
-/* Active state — amber strip, still slim */
-.checkout-strip.is-active {
-  background: var(--gold-soft);
-  border-color: #fcd34d;
-  padding: 12px 16px;
+/* Modal: destination picker + status */
+.dest-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 18px;
 }
-.checkout-strip-active {
+.dest-fieldset legend {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.dest-option {
+  display: block;
+  cursor: pointer;
+}
+.dest-option input { position: absolute; opacity: 0; pointer-events: none; }
+.dest-pill {
   display: flex;
   align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.checkout-strip-active-text {
-  font-size: 15px;
-  font-weight: 500;
+  gap: 12px;
+  padding: 14px 18px;
+  margin: 6px 0;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
   color: var(--text);
-  flex: 1;
-  min-width: 0;
+  font-size: 16px;
+  font-weight: 500;
+  transition: all 0.15s;
 }
-.checkout-strip-active-text strong { color: var(--gold-dark); font-weight: 700; }
-.checkout-strip-active-text .muted { color: var(--text-muted); font-weight: 400; }
-.checkin-compact {
-  padding: 9px 18px;
-  font-size: 14px;
-  min-height: 38px;
-  flex-shrink: 0;
+.dest-emoji-modal { font-size: 22px; }
+.dest-option:hover .dest-pill { background: var(--cyan-soft); border-color: var(--cyan); }
+.dest-option input:checked + .dest-pill {
+  background: var(--cyan-soft);
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.18);
 }
 
-@media (max-width: 640px) {
-  .checkout-strip-options { width: 100%; margin-left: 0; }
-  .checkout-chip { flex: 1; justify-content: center; min-width: 0; }
+.checkout-status {
+  background: var(--gold-soft);
+  border: 1px solid #fcd34d;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
 }
+.status-eyebrow {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--gold-dark);
+  margin: 0 0 6px;
+}
+.status-where {
+  font-family: var(--font-heading);
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+.status-where strong { color: var(--gold-dark); }
+.status-meta { margin: 0; font-size: 14px; }
+
+/* Legacy strip kept hidden — old class names removed; this is just a safe no-op */
+.checkout-strip { display: none; }
 
 .checkout-modal-icon {
   background: linear-gradient(135deg, var(--cyan), var(--indigo));
@@ -3567,7 +3581,7 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
   .draft-banner { flex-direction: column; align-items: flex-start; gap: 6px; }
   .student-row { grid-template-columns: 36px 1fr; }
   .student-row .student-meta { grid-column: 1 / -1; align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
-  .checkout-strip { padding: 12px; }
-  .checkout-strip-label { font-size: 13px; }
-  .checkout-chip { font-size: 13px; padding: 8px 12px; }
+  .step-out-btn { padding: 7px 12px; font-size: 13px; }
+  .step-out-btn .step-out-label { display: none; }
+  .step-out-btn.is-active .step-out-label { display: inline; }
 }
