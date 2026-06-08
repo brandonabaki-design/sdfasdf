@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>AISA Hub · My Progress</title>
-  <meta name="description" content="Track your activity, streaks, badges, and the AI feedback you've earned." />
+  <title>AISA Hub · Student Profile</title>
+  <meta name="description" content="A deep view of a single student's activity, responses, AI feedback history, and an AI-generated summary of strengths, growth areas, and next steps." />
   <meta name="theme-color" content="#0b1533" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -23,7 +23,7 @@
   <noscript>
     <div class="noscript-banner">
       <strong>JavaScript is required.</strong><br />
-      My Progress needs JavaScript to load your data.
+      The student profile page needs JavaScript to load data and AI summaries.
     </div>
   </noscript>
   <div class="bg-blobs" aria-hidden="true">
@@ -37,17 +37,16 @@
       <span class="brand-mark" aria-hidden="true">🦁</span>
       <span class="brand-text">
         <span class="brand-name">AISA</span>
-        <span class="brand-sub">My Progress</span>
+        <span class="brand-sub">Student Profile</span>
       </span>
     </a>
 
     <div class="topbar-meta">
-      <a href="index.html" class="btn btn-ghost">← Home</a>
+      <a href="dashboard.html" class="btn btn-ghost">← Dashboard</a>
+      <a href="teacher.html" class="btn btn-ghost">Teacher Studio</a>
       <span id="user-chip" class="user-chip">
         <span class="user-dot"></span>
         <span id="user-name"></span>
-        <span class="muted">·</span>
-        <span id="user-email"></span>
       </span>
       <button id="sign-out" class="btn btn-ghost">Sign out</button>
     </div>
@@ -57,29 +56,15 @@
     <section id="signin-container" class="hero">
       <div class="hero-content">
         <h1 class="hero-title font-heading">
-          <span class="gradient-amber">Your progress</span>
+          <span class="gradient-amber">Student Profile</span>
         </h1>
-        <p class="hero-subtitle">
-          See your activity, streaks, badges, and every piece of AI feedback you've earned.
-        </p>
-        <p id="status" class="hero-status">
-          Sign in with your <strong>aisa.sch.ae</strong> account to continue.
-        </p>
-        <div class="signin-wrap">
-          <div id="g-signin-button"></div>
-        </div>
+        <p class="hero-subtitle">Sign in as a teacher to view a student's detailed activity, responses, and AI-generated analysis.</p>
+        <p id="status" class="hero-status">Sign in with your <strong>aisa.sch.ae</strong> teacher account.</p>
+        <div class="signin-wrap"><div id="g-signin-button"></div></div>
       </div>
     </section>
 
     <section id="signed-in" hidden>
-      <header class="page-header progress-header">
-        <div>
-          <p class="hello-line muted small">Hi <span id="hello-name"></span> — here's your progress</p>
-          <h2 class="page-title font-heading">Your progress</h2>
-        </div>
-        <button type="button" class="btn btn-ghost" id="refresh-btn">Refresh</button>
-      </header>
-
       <section id="loading" class="role-loading" aria-live="polite" aria-busy="true">
         <div class="skeleton-stack" aria-hidden="true">
           <div class="skeleton skeleton-line medium"></div>
@@ -89,19 +74,32 @@
           <div class="skeleton-card"></div>
           <div class="skeleton-card"></div>
           <div class="skeleton-card"></div>
-          <div class="skeleton-card"></div>
         </div>
-        <span class="sr-only">Loading your progress…</span>
+        <span class="sr-only">Loading student profile…</span>
       </section>
 
-      <section id="dashboard-content" hidden>
-        <!-- Level hero with XP bar -->
-        <section id="level-hero" class="level-hero" aria-label="Your level"></section>
+      <section id="profile-content" hidden>
+        <!-- Student hero -->
+        <section id="student-hero" class="student-hero"></section>
 
-        <!-- KPI cards -->
+        <!-- KPIs -->
         <div class="stats-grid" id="stats-grid"></div>
 
-        <!-- Activity heatmap -->
+        <!-- AI Summary -->
+        <div class="panel ai-summary-panel">
+          <header class="panel-header">
+            <div class="panel-header-row">
+              <div>
+                <h2 class="panel-title font-heading">AI overall summary</h2>
+                <p class="panel-subtitle">Gemini reads this student's full activity log and writes a private snapshot for you.</p>
+              </div>
+              <button type="button" class="btn btn-primary" id="generate-summary-btn">✨ Generate</button>
+            </div>
+          </header>
+          <div id="ai-summary" class="ai-summary"></div>
+        </div>
+
+        <!-- Heatmap -->
         <div class="panel">
           <header class="panel-header">
             <h2 class="panel-title font-heading">Last 9 weeks of activity</h2>
@@ -121,77 +119,52 @@
           </div>
         </div>
 
-        <!-- Achievements -->
-        <div class="panel">
+        <!-- Flagged responses (if any) -->
+        <div class="panel" id="flagged-section" hidden>
           <header class="panel-header">
-            <h2 class="panel-title font-heading">Achievements</h2>
-            <p class="panel-subtitle">Earn badges for staying engaged.</p>
+            <h2 class="panel-title font-heading">Flagged responses</h2>
+            <p class="panel-subtitle">Responses that triggered our distress classifier.</p>
           </header>
-          <div class="achievements-grid" id="achievements-grid"></div>
-        </div>
-
-        <!-- Time in class (checkouts) -->
-        <div class="panel">
-          <header class="panel-header">
-            <h2 class="panel-title font-heading">Time in class</h2>
-            <p class="panel-subtitle">How much time you've spent outside of class — your teachers see this too.</p>
-          </header>
-          <div class="checkout-summary" id="checkout-summary"></div>
-        </div>
-
-        <!-- Leaderboards -->
-        <div class="panel">
-          <header class="panel-header">
-            <h2 class="panel-title font-heading">🏆 Leaderboards</h2>
-            <p class="panel-subtitle">Three friendly rankings this week. You always see your own row.</p>
-          </header>
-          <div class="leaderboard-grid">
-            <section class="leaderboard-card" aria-labelledby="lb-stays-title">
-              <h3 id="lb-stays-title" class="leaderboard-title">🚪 Stays in class</h3>
-              <p class="muted small" style="margin: 0 0 12px;">Least minutes outside class this week.</p>
-              <div class="leaderboard" id="leaderboard"></div>
-            </section>
-            <section class="leaderboard-card" aria-labelledby="lb-active-title">
-              <h3 id="lb-active-title" class="leaderboard-title">📝 Most active</h3>
-              <p class="muted small" style="margin: 0 0 12px;">Most responses submitted this week.</p>
-              <div class="leaderboard" id="lb-active"></div>
-            </section>
-            <section class="leaderboard-card" aria-labelledby="lb-streak-title">
-              <h3 id="lb-streak-title" class="leaderboard-title">🔥 Streak champions</h3>
-              <p class="muted small" style="margin: 0 0 12px;">Longest current activity streaks.</p>
-              <div class="leaderboard" id="lb-streak"></div>
-            </section>
-          </div>
-        </div>
-
-        <!-- Recent AI feedback -->
-        <div class="panel">
-          <header class="panel-header">
-            <h2 class="panel-title font-heading">Recent AI feedback</h2>
-            <p class="panel-subtitle">The last few pieces of feedback you've received.</p>
-          </header>
-          <div class="feedback-stack" id="feedback-stack"></div>
+          <div id="flagged-list-profile"></div>
         </div>
 
         <!-- Per-prompt progress -->
         <div class="panel">
           <header class="panel-header">
             <h2 class="panel-title font-heading">Per-prompt progress</h2>
-            <p class="panel-subtitle">Pending prompts first, then completed.</p>
+            <p class="panel-subtitle">Every active prompt of yours and this student's status on it.</p>
           </header>
-          <div class="prompt-progress-list" id="prompt-progress-list"></div>
+          <div id="prompts-list"></div>
+        </div>
+
+        <!-- Response history -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Response history</h2>
+            <p class="panel-subtitle">Every submission this student has made to your prompts, newest first.</p>
+          </header>
+          <div id="response-history"></div>
+        </div>
+
+        <!-- Check-outs -->
+        <div class="panel" id="checkouts-section" hidden>
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Check-outs routed to you</h2>
+            <p class="panel-subtitle">Times this student notified you they were stepping out.</p>
+          </header>
+          <div id="checkouts-list-profile"></div>
         </div>
       </section>
     </section>
   </main>
 
   <footer class="page-footer">
-    <a href="index.html" class="footer-link">← Home</a>
+    <a href="dashboard.html" class="footer-link">← Back to Dashboard</a>
   </footer>
 
   <script src="config.js"></script>
   <script src="auth.js"></script>
-  <script src="progress.js"></script>
+  <script src="student.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
 </body>
 </html>

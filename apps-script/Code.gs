@@ -148,6 +148,17 @@ function doPost(e) {
       case 'get_checkout_leaderboard':
         return jsonOut_({ ok: true, leaderboard: getCheckoutLeaderboard_(claims) });
 
+      case 'get_engagement_leaderboards':
+        return jsonOut_({ ok: true, leaderboards: getEngagementLeaderboards_(claims) });
+
+      case 'get_student_profile':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, profile: getStudentProfile_(claims, payload.google_sub || '', payload.student_email || '') });
+
+      case 'summarize_student':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, summary: summarizeStudent_(claims, payload.google_sub || '', payload.student_email || '') });
+
       case 'export_csv':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, csv: exportCsv_(claims, payload.kind || 'responses'), kind: payload.kind || 'responses' });
@@ -694,6 +705,356 @@ function getStudentDashboard_(claims) {
       by_destination: byDestination,
       recent: myCheckouts.slice(0, 5),
     },
+  };
+}
+
+function getEngagementLeaderboards_(claims) {
+  const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const respLast = respSheet.getLastRow();
+  const now = Date.now();
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const byStudent = {};
+  if (respLast >= 2) {
+    const values = respSheet.getRange(2, 1, respLast - 1, RESPONSES_HEADERS.length).getValues();
+    for (const r of values) {
+      const sub = r[4];
+      if (!sub) continue;
+      if (!byStudent[sub]) byStudent[sub] = { sub, email: r[2], name: r[3], week_responses: 0, total_responses: 0, days: {} };
+      byStudent[sub].total_responses++;
+      const createdAt = r[1] instanceof Date ? r[1] : new Date(r[1]);
+      const dayKey = createdAt.toISOString().slice(0, 10);
+      byStudent[sub].days[dayKey] = true;
+      if (createdAt.getTime() >= sevenDaysAgo) byStudent[sub].week_responses++;
+    }
+  }
+
+  // Streak = consecutive days back from today with activity (today empty OK).
+  function streakFor(daysMap) {
+    let streak = 0;
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      if (daysMap[key]) streak++;
+      else if (i === 0) continue;
+      else break;
+    }
+    return streak;
+  }
+
+  const initials = (n) => String(n || '').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
+  const list = Object.values(byStudent).map(s => ({
+    sub: s.sub,
+    email: s.email,
+    name: s.name,
+    week_responses: s.week_responses,
+    total_responses: s.total_responses,
+    streak: streakFor(s.days),
+  }));
+
+  const isTeacher = isTeacher_(claims.email);
+  const myselfRow = list.find(s => s.sub === claims.sub) || null;
+  function format(rows, sortFn, valueField) {
+    const sorted = rows.slice().sort(sortFn);
+    for (let i = 0; i < sorted.length; i++) sorted[i].rank = i + 1;
+    const top = sorted.slice(0, 5).map(s => ({
+      rank: s.rank,
+      display_name: isTeacher ? s.name : (s.sub === claims.sub ? s.name : (initials(s.name) || 'Anon')),
+      email: isTeacher ? s.email : undefined,
+      sub: isTeacher ? s.sub : undefined,
+      value: s[valueField],
+      streak: s.streak,
+      is_me: s.sub === claims.sub,
+    }));
+    const me = sorted.find(s => s.sub === claims.sub);
+    return {
+      top: top,
+      my_rank: me ? me.rank : null,
+      my_value: me ? me[valueField] : 0,
+      total_students: sorted.length,
+    };
+  }
+
+  return {
+    most_active: format(list, (a, b) => b.week_responses - a.week_responses || b.total_responses - a.total_responses, 'week_responses'),
+    streak_champions: format(list, (a, b) => b.streak - a.streak || b.total_responses - a.total_responses, 'streak'),
+  };
+}
+
+function getStudentProfile_(claims, googleSub, studentEmail) {
+  if (!googleSub && !studentEmail) throw new Error('google_sub or student_email required');
+  const myEmail = String(claims.email).toLowerCase();
+  const myPromptIds = new Set(getMyPromptRows_(claims).map(r => r[0]));
+  const subKey = googleSub || '';
+  const emailKey = (studentEmail || '').toLowerCase();
+
+  // Find this student's responses against the teacher's prompts only (privacy).
+  const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const respLast = respSheet.getLastRow();
+  const responses = [];
+  let studentName = '', studentEmailOut = '', subOut = '';
+  if (respLast >= 2) {
+    const values = respSheet.getRange(2, 1, respLast - 1, RESPONSES_HEADERS.length).getValues();
+    for (const r of values) {
+      const matchSub = subKey && r[4] === subKey;
+      const matchEmail = emailKey && String(r[2] || '').toLowerCase() === emailKey;
+      if (!matchSub && !matchEmail) continue;
+      if (!myPromptIds.has(r[5])) continue;
+      studentName = studentName || r[3];
+      studentEmailOut = studentEmailOut || r[2];
+      subOut = subOut || r[4];
+      responses.push({
+        id: r[0],
+        created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+        prompt_id: r[5],
+        prompt_title: r[6],
+        body: r[7],
+        ai_feedback: r[8] || '',
+        flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
+        flag_reason: r[12] || '',
+        resolved: r[13] === true || String(r[13]).toLowerCase() === 'true',
+        response_type: String(r[14] || 'open').toLowerCase(),
+        option_index: parseInt(r[15], 10) || null,
+        rating_value: parseInt(r[16], 10) || null,
+      });
+    }
+  }
+  if (!studentEmailOut && !subOut) {
+    throw new Error("This student hasn't responded to any of your prompts yet.");
+  }
+  responses.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+
+  // Checkouts notified to me from this student.
+  const coSheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const coLast = coSheet.getLastRow();
+  const checkouts = [];
+  let totalMinutesOut = 0;
+  const destinationCounts = {};
+  if (coLast >= 2) {
+    const values = coSheet.getRange(2, 1, coLast - 1, CHECKOUTS_HEADERS.length).getValues();
+    for (const r of values) {
+      const sub = r[3];
+      if (subOut && sub !== subOut) continue;
+      if (!subOut && String(r[1] || '').toLowerCase() !== emailKey) continue;
+      // Only those routed to me
+      if (String(r[5] || '').toLowerCase() !== myEmail) continue;
+      const outAt = r[7] instanceof Date ? r[7] : new Date(r[7]);
+      const inAt = r[8] instanceof Date ? r[8] : (r[8] ? new Date(r[8]) : null);
+      const status = String(r[9] || '').toLowerCase();
+      let minutes = 0;
+      if (status === 'in' && inAt) minutes = Math.max(0, Math.round((inAt - outAt) / 60000));
+      else if (status === 'out') minutes = Math.max(0, Math.round((Date.now() - outAt.getTime()) / 60000));
+      totalMinutesOut += minutes;
+      destinationCounts[r[4]] = (destinationCounts[r[4]] || 0) + 1;
+      checkouts.push({
+        id: r[0],
+        destination: r[4],
+        notes: r[6] || '',
+        checked_out_at: outAt.toISOString(),
+        checked_in_at: inAt ? inAt.toISOString() : '',
+        minutes: minutes,
+        status: status,
+      });
+    }
+  }
+  checkouts.sort((a, b) => (a.checked_out_at < b.checked_out_at ? 1 : -1));
+
+  // Completions from my prompts only.
+  const compIds = getCompletedPromptIdsForUser_(subOut);
+  let completedMine = 0;
+  myPromptIds.forEach(id => { if (compIds.has(id)) completedMine++; });
+
+  // Build per-prompt summary across my prompts
+  const respByPrompt = {};
+  for (const r of responses) {
+    if (!respByPrompt[r.prompt_id]) respByPrompt[r.prompt_id] = [];
+    respByPrompt[r.prompt_id].push(r);
+  }
+  const myPromptDetails = [];
+  for (const row of getMyPromptRows_(claims)) {
+    if (String(row[5]).toLowerCase() !== 'active') continue;
+    const rs = respByPrompt[row[0]] || [];
+    myPromptDetails.push({
+      id: row[0],
+      title: row[3],
+      type: String(row[9] || 'open').toLowerCase(),
+      response_count: rs.length,
+      last_response_at: rs.length ? rs[0].created_at : null,
+      completed: compIds.has(row[0]),
+      last_ai_feedback: rs[0] && rs[0].ai_feedback ? rs[0].ai_feedback : '',
+    });
+  }
+  myPromptDetails.sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    const aL = a.last_response_at || '', bL = b.last_response_at || '';
+    return aL < bL ? 1 : -1;
+  });
+
+  // Rating responses
+  const ratings = responses.filter(r => r.response_type === 'rating' && r.rating_value);
+  const avgRating = ratings.length
+    ? Math.round((ratings.reduce((s, r) => s + r.rating_value, 0) / ratings.length) * 10) / 10
+    : null;
+
+  // Activity by day (last 63 days)
+  const responsesByDay = {};
+  for (const r of responses) {
+    const key = String(r.created_at).slice(0, 10);
+    responsesByDay[key] = (responsesByDay[key] || 0) + 1;
+  }
+  const heatmap = [];
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - 62);
+  for (let i = 0; i < 63; i++) {
+    const d = new Date(start);
+    d.setUTCDate(d.getUTCDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    heatmap.push({ date: key, count: responsesByDay[key] || 0 });
+  }
+
+  // Current streak
+  let streak = 0;
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(todayStart);
+    d.setUTCDate(d.getUTCDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    if (responsesByDay[key]) streak++;
+    else if (i === 0) continue;
+    else break;
+  }
+
+  const flagged = responses.filter(r => r.flagged);
+
+  return {
+    student: { google_sub: subOut, email: studentEmailOut, name: studentName },
+    summary: {
+      total_responses: responses.length,
+      flagged_count: flagged.length,
+      unresolved_flagged_count: flagged.filter(r => !r.resolved).length,
+      avg_rating: avgRating,
+      prompts_responded: Object.keys(respByPrompt).length,
+      prompts_available: myPromptDetails.length,
+      completed_count: completedMine,
+      streak: streak,
+      checkout_trips: checkouts.length,
+      checkout_minutes: totalMinutesOut,
+      checkout_destinations: destinationCounts,
+      last_active: responses.length ? responses[0].created_at : null,
+    },
+    heatmap: heatmap,
+    responses: responses,
+    prompts: myPromptDetails,
+    flagged: flagged,
+    checkouts: checkouts,
+  };
+}
+
+function summarizeStudent_(claims, googleSub, studentEmail) {
+  const profile = getStudentProfile_(claims, googleSub, studentEmail);
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+  const model = props.getProperty('GEMINI_MODEL') || DEFAULT_GEMINI_MODEL;
+
+  // Build the user text
+  const lines = [];
+  lines.push('Student: ' + (profile.student.name || profile.student.email));
+  lines.push('Total responses: ' + profile.summary.total_responses);
+  lines.push('Current streak: ' + profile.summary.streak + ' days');
+  if (profile.summary.avg_rating != null) lines.push('Average self-rating: ' + profile.summary.avg_rating + ' / 5');
+  lines.push('Prompts available: ' + profile.summary.prompts_available);
+  lines.push('Prompts responded to: ' + profile.summary.prompts_responded);
+  lines.push('Prompts marked complete: ' + profile.summary.completed_count);
+  lines.push('Flagged responses: ' + profile.summary.flagged_count + ' (' + profile.summary.unresolved_flagged_count + ' unresolved)');
+  lines.push('Check-out trips: ' + profile.summary.checkout_trips + ' (~' + profile.summary.checkout_minutes + ' minutes out of class total)');
+  lines.push('');
+  lines.push('Recent responses (newest first, up to 20):');
+  for (const r of profile.responses.slice(0, 20)) {
+    lines.push('— ' + r.prompt_title + ' [' + r.response_type + ']');
+    if (r.response_type === 'open') {
+      lines.push('   Response: ' + String(r.body || '').slice(0, 800));
+      if (r.ai_feedback) lines.push('   AI feedback (already given): ' + String(r.ai_feedback).slice(0, 300));
+    } else if (r.response_type === 'multiple_choice' || r.response_type === 'poll') {
+      lines.push('   Picked: ' + r.body);
+    } else if (r.response_type === 'rating') {
+      lines.push('   Rated: ' + r.body);
+    } else {
+      lines.push('   ' + r.body);
+    }
+    if (r.flagged) lines.push('   FLAGGED for review: ' + (r.flag_reason || ''));
+  }
+  const userText = lines.join('\n');
+
+  const systemPrompt =
+    'You are an experienced K-12 teacher writing a private end-of-term summary about ONE student ' +
+    'based on the activity log below. Be specific (cite a response or pattern when you can), ' +
+    'kind, professional, and concrete. The student will not see this — it is for the teacher.\n\n' +
+    'Return a JSON object matching the schema:\n' +
+    '- snapshot: 2-3 sentence overall snapshot of how this student is doing.\n' +
+    '- strengths: 2-4 short bullets (each a complete sentence) of what is going well.\n' +
+    '- growth_areas: 2-4 short bullets of where they can grow, framed as opportunities.\n' +
+    '- next_steps: 1-3 short, specific things the teacher could do next week with this student.\n' +
+    '- engagement_score: integer 1 (low) to 10 (high) based on volume + recency + completion.\n' +
+    '- engagement_reason: 1 sentence explaining the score.\n' +
+    'Ground every point in the data. Do not invent feelings or assessments the data does not show.';
+
+  const schema = {
+    type: 'object',
+    properties: {
+      snapshot: { type: 'string' },
+      strengths: { type: 'array', items: { type: 'string' } },
+      growth_areas: { type: 'array', items: { type: 'string' } },
+      next_steps: { type: 'array', items: { type: 'string' } },
+      engagement_score: { type: 'integer' },
+      engagement_reason: { type: 'string' },
+    },
+    required: ['snapshot', 'strengths', 'growth_areas', 'next_steps', 'engagement_score'],
+  };
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(apiKey);
+  const requestBody = {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 1800,
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+    },
+  };
+
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(requestBody),
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) {
+    throw new Error('Gemini API ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+  }
+  const data = JSON.parse(res.getContentText());
+  const candidate = data.candidates && data.candidates[0];
+  if (!candidate) throw new Error('No candidate in Gemini response');
+  const text = (candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text) || '';
+  if (!text) throw new Error('Empty Gemini response');
+  let parsed;
+  try { parsed = JSON.parse(text); } catch (e) { throw new Error('Could not parse summary'); }
+  return {
+    generated_at: new Date().toISOString(),
+    student_name: profile.student.name,
+    student_email: profile.student.email,
+    snapshot: String(parsed.snapshot || ''),
+    strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
+    growth_areas: Array.isArray(parsed.growth_areas) ? parsed.growth_areas.map(String) : [],
+    next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.map(String) : [],
+    engagement_score: parseInt(parsed.engagement_score, 10) || 0,
+    engagement_reason: String(parsed.engagement_reason || ''),
   };
 }
 

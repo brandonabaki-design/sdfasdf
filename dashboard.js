@@ -178,8 +178,17 @@ function renderStudentsTable(students) {
   for (const s of students) {
     const tr = document.createElement('tr');
     if (s.flagged_count > 0) tr.classList.add('row-has-flagged');
+    tr.classList.add('row-clickable');
+    const params = new URLSearchParams();
+    if (s.google_sub) params.set('sub', s.google_sub);
+    if (s.email) params.set('email', s.email);
+    const href = 'student.html?' + params.toString();
+    tr.dataset.href = href;
+    tr.setAttribute('role', 'link');
+    tr.setAttribute('tabindex', '0');
+    tr.setAttribute('aria-label', `Open profile for ${s.name || s.email}`);
     tr.innerHTML = `
-      <td><span class="row-title"></span></td>
+      <td><a class="row-link" href="${href}"><span class="row-title"></span></a></td>
       <td><code class="row-email"></code></td>
       <td class="num"></td>
       <td class="num"></td>
@@ -192,6 +201,13 @@ function renderStudentsTable(students) {
     tr.cells[3].textContent = s.prompts_responded;
     tr.querySelector('.row-flagged').textContent = s.flagged_count;
     tr.querySelector('.row-time').textContent = friendlyTime(s.last_active);
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      window.location.href = href;
+    });
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.location.href = href; }
+    });
     tbody.appendChild(tr);
   }
 }

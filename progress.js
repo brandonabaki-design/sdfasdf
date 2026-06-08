@@ -69,9 +69,10 @@ async function loadDashboard() {
   loading.hidden = false;
   content.hidden = true;
   try {
-    const [dash, leaderboard] = await Promise.all([
+    const [dash, stays, engagement] = await Promise.all([
       api('get_student_dashboard'),
       api('get_checkout_leaderboard'),
+      api('get_engagement_leaderboards'),
     ]);
     if (!dash.ok) {
       loading.textContent = `Couldn't load: ${friendlyError(dash.error)}`;
@@ -79,21 +80,52 @@ async function loadDashboard() {
     }
     loading.hidden = true;
     content.hidden = false;
-    renderDashboard(dash.dashboard, currentUser, leaderboard.ok ? leaderboard.leaderboard : null);
+    const leaderboards = {
+      stays: stays.ok ? stays.leaderboard : null,
+      most_active: engagement.ok ? engagement.leaderboards.most_active : null,
+      streaks: engagement.ok ? engagement.leaderboards.streak_champions : null,
+    };
+    renderDashboard(dash.dashboard, currentUser, leaderboards);
   } catch (err) {
     loading.textContent = `Network error: ${err.message}`;
   }
 }
 
-function renderDashboard(d, user, lb) {
+function renderDashboard(d, user, leaderboards) {
   renderLevelHero(d, user);
   renderStats(d.summary);
   renderHeatmap(d.heatmap);
   renderAchievements(d.achievements);
-  renderCheckoutSummary(d.checkouts, lb);
-  renderLeaderboard(lb);
+  renderCheckoutSummary(d.checkouts, leaderboards.stays);
+  renderLeaderboard(leaderboards.stays, 'leaderboard', formatStaysRow);
+  renderLeaderboard(leaderboards.most_active, 'lb-active', formatGenericRow('response', 'responses'));
+  renderLeaderboard(leaderboards.streaks, 'lb-streak', formatGenericRow('day', 'days'));
   renderFeedback(d.recent_feedback);
   renderPromptProgress(d.prompt_progress);
+}
+
+function formatStaysRow(row) {
+  return {
+    rank: row.rank,
+    medal: row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : '#' + row.rank,
+    name: row.display_name + (row.is_me ? ' (you)' : ''),
+    sub: row.trips + (row.trips === 1 ? ' trip' : ' trips'),
+    value: row.minutes + ' min',
+    is_me: row.is_me,
+  };
+}
+
+function formatGenericRow(singular, plural) {
+  return function(row) {
+    return {
+      rank: row.rank,
+      medal: row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : '#' + row.rank,
+      name: row.display_name + (row.is_me ? ' (you)' : ''),
+      sub: '',
+      value: row.value + ' ' + (row.value === 1 ? singular : plural),
+      is_me: row.is_me,
+    };
+  };
 }
 
 function destinationEmoji(d) {
@@ -166,30 +198,33 @@ function renderCheckoutSummary(co, lb) {
   }
 }
 
-function renderLeaderboard(lb) {
-  const el = document.getElementById('leaderboard');
-  if (!lb || !lb.leaderboard || lb.leaderboard.length === 0) {
-    el.innerHTML = '<p class="muted">Not enough data for a leaderboard yet.</p>';
+function renderLeaderboard(lb, mountId, formatter) {
+  const el = document.getElementById(mountId);
+  if (!el) return;
+  const rows = lb && (lb.leaderboard || lb.top) || null;
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<p class="muted small">Not enough data yet.</p>';
     return;
   }
   el.innerHTML = '';
-  for (const row of lb.leaderboard) {
+  for (const row of rows) {
+    const r = formatter(row);
     const item = document.createElement('div');
-    item.className = 'lb-row' + (row.is_me ? ' is-me' : '') + (row.rank <= 3 ? ' is-podium' : '');
-    const medal = row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : '#' + row.rank;
+    item.className = 'lb-row' + (r.is_me ? ' is-me' : '') + (r.rank <= 3 ? ' is-podium' : '');
     item.innerHTML = `
       <span class="lb-rank"></span>
       <span class="lb-name"></span>
       <span class="lb-trips muted small"></span>
       <span class="lb-time"></span>
     `;
-    item.querySelector('.lb-rank').textContent = medal;
-    item.querySelector('.lb-name').textContent = row.display_name + (row.is_me ? ' (you)' : '');
-    item.querySelector('.lb-trips').textContent = row.trips + (row.trips === 1 ? ' trip' : ' trips');
-    item.querySelector('.lb-time').textContent = row.minutes + ' min';
+    item.querySelector('.lb-rank').textContent = r.medal;
+    item.querySelector('.lb-name').textContent = r.name;
+    item.querySelector('.lb-trips').textContent = r.sub;
+    item.querySelector('.lb-time').textContent = r.value;
     el.appendChild(item);
   }
-  if (lb.my_rank && lb.my_rank > 5) {
+  // For the stays leaderboard, also append the "below" row if applicable.
+  if (mountId === 'leaderboard' && lb && lb.my_rank && lb.my_rank > 5) {
     const me = document.createElement('div');
     me.className = 'lb-row is-me lb-below';
     me.innerHTML = `
