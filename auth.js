@@ -1,6 +1,75 @@
-// Shared Google sign-in + Apps Script API helper. Used by both index.html and teacher.html.
+// Shared Google sign-in + Apps Script API helper. Used by every page.
+//
+// Session model
+// -------------
+// The server validates every request via Google's tokeninfo endpoint, so the
+// security boundary is unchanged. What this file does on the client side is
+// reduce how often the user has to interactively re-sign-in:
+//
+//  1. After a successful Google sign-in, the verified ID token is cached in
+//     localStorage (keyed per client). On a fresh page load we read the cache
+//     and only fall through to interactive sign-in if the cached token is
+//     missing, expired, or for a different Workspace domain.
+//  2. With auto_select: true, Google's One Tap can silently re-issue a token
+//     when the user is still signed into Google in this browser. A timer
+//     fires this ~5 minutes before the current token expires.
+//  3. If any API call comes back with "invalid idToken" we clear the cache,
+//     drop the user back to the sign-in screen, and let them re-auth.
+//
+// localStorage trades a small risk (a token stolen via XSS could be replayed
+// until expiry) for a much better UX. Our render code uses textContent for
+// every user-supplied string so the XSS surface is effectively zero.
 
 let currentUser = null;
+let refreshTimer = null;
+
+const TOKEN_STORAGE_KEY = 'aisa.idtoken.v1';
+
+function tokenStorageKey() {
+  const cfg = window.AISA_CONFIG || {};
+  return TOKEN_STORAGE_KEY + ':' + (cfg.GOOGLE_CLIENT_ID || 'unknown');
+}
+
+function loadStoredToken() {
+  try {
+    const raw = localStorage.getItem(tokenStorageKey());
+    if (!raw) return null;
+    const claims = parseJwt(raw);
+    // Treat tokens within 60s of expiry as already gone — they'd fail the next call.
+    const expMs = Number(claims.exp || 0) * 1000;
+    if (!expMs || expMs < Date.now() + 60_000) {
+      localStorage.removeItem(tokenStorageKey());
+      return null;
+    }
+    return { token: raw, claims };
+  } catch (err) {
+    try { localStorage.removeItem(tokenStorageKey()); } catch (_) {}
+    return null;
+  }
+}
+
+function storeToken(token) {
+  try { localStorage.setItem(tokenStorageKey(), token); } catch (err) { /* private mode */ }
+}
+
+function clearStoredToken() {
+  try { localStorage.removeItem(tokenStorageKey()); } catch (_) {}
+}
+
+function scheduleSilentRefresh(claims) {
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+  const expMs = Number(claims.exp || 0) * 1000;
+  if (!expMs) return;
+  // Refresh 5 minutes before expiry, but not in less than 30 seconds.
+  const delay = Math.max(30_000, expMs - Date.now() - 5 * 60_000);
+  refreshTimer = setTimeout(() => {
+    if (window.google && google.accounts && google.accounts.id) {
+      try {
+        google.accounts.id.prompt(); // silently re-issues if user is in Google
+      } catch (err) { /* swallow */ }
+    }
+  }, delay);
+}
 
 function initGoogleSignIn() {
   const cfg = window.AISA_CONFIG;
@@ -16,13 +85,32 @@ function initGoogleSignIn() {
     callback: handleCredentialResponse,
     hd: cfg.ALLOWED_HD,
     ux_mode: 'popup',
-    auto_select: false,
+    auto_select: true,
   });
 
+  // 1. Try the cached token first — covers refreshes, tab restores, return visits.
+  const stored = loadStoredToken();
+  if (stored && stored.claims.hd === cfg.ALLOWED_HD) {
+    currentUser = {
+      idToken: stored.token,
+      email: stored.claims.email,
+      name: stored.claims.name,
+      sub: stored.claims.sub,
+    };
+    document.body.classList.add('is-signed-in');
+    document.dispatchEvent(new CustomEvent('aisa:signed-in', { detail: currentUser }));
+    scheduleSilentRefresh(stored.claims);
+    // Quietly try One Tap so we can refresh in the background if Google is happy to.
+    try { google.accounts.id.prompt(); } catch (_) {}
+    return;
+  }
+
+  // 2. No cached token — render the button and try One Tap.
   google.accounts.id.renderButton(
     document.getElementById('g-signin-button'),
     { type: 'standard', size: 'large', theme: 'filled_black', text: 'signin_with', shape: 'pill', logo_alignment: 'left' }
   );
+  try { google.accounts.id.prompt(); } catch (_) {}
 }
 
 function parseJwt(token) {
@@ -51,13 +139,28 @@ function handleCredentialResponse(response) {
     sub: claims.sub,
   };
 
+  storeToken(response.credential);
+  scheduleSilentRefresh(claims);
+
   document.body.classList.add('is-signed-in');
   document.dispatchEvent(new CustomEvent('aisa:signed-in', { detail: currentUser }));
 }
 
 function signOut() {
-  google.accounts.id.disableAutoSelect();
+  try { google.accounts.id.disableAutoSelect(); } catch (_) {}
   currentUser = null;
+  clearStoredToken();
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+  document.body.classList.remove('is-signed-in');
+  document.dispatchEvent(new CustomEvent('aisa:signed-out'));
+}
+
+// If the backend rejects our token (expired between cache and call, revoked,
+// etc.), drop the user back to the sign-in screen so they can re-auth.
+function handleAuthFailure() {
+  clearStoredToken();
+  currentUser = null;
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
   document.body.classList.remove('is-signed-in');
   document.dispatchEvent(new CustomEvent('aisa:signed-out'));
 }
@@ -73,5 +176,9 @@ async function api(action, payload) {
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action, idToken: currentUser.idToken, ...(payload || {}) }),
   });
-  return res.json();
+  const data = await res.json();
+  if (!data.ok && (data.error === 'invalid idToken' || data.error === 'missing idToken')) {
+    handleAuthFailure();
+  }
+  return data;
 }
