@@ -67,6 +67,9 @@
       <section id="loading" class="role-loading">Loading...</section>
 
       <section id="dashboard-content" hidden>
+        <!-- Level hero with XP bar -->
+        <section id="level-hero" class="level-hero" aria-label="Your level"></section>
+
         <!-- KPI cards -->
         <div class="stats-grid" id="stats-grid"></div>
 
@@ -97,6 +100,24 @@
             <p class="panel-subtitle">Earn badges for staying engaged.</p>
           </header>
           <div class="achievements-grid" id="achievements-grid"></div>
+        </div>
+
+        <!-- Time in class (checkouts) -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Time in class</h2>
+            <p class="panel-subtitle">How much time you've spent outside of class — your teachers see this too.</p>
+          </header>
+          <div class="checkout-summary" id="checkout-summary"></div>
+        </div>
+
+        <!-- Leaderboard -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Stays-in-class leaderboard</h2>
+            <p class="panel-subtitle">Top 5 students with the least time out of class this week.</p>
+          </header>
+          <div class="leaderboard" id="leaderboard"></div>
         </div>
 
         <!-- Recent AI feedback -->

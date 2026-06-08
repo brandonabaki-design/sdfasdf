@@ -145,6 +145,9 @@ function doPost(e) {
       case 'get_student_dashboard':
         return jsonOut_({ ok: true, dashboard: getStudentDashboard_(claims) });
 
+      case 'get_checkout_leaderboard':
+        return jsonOut_({ ok: true, leaderboard: getCheckoutLeaderboard_(claims) });
+
       case 'export_csv':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, csv: exportCsv_(claims, payload.kind || 'responses'), kind: payload.kind || 'responses' });
@@ -618,6 +621,43 @@ function getStudentDashboard_(claims) {
   const pendingCount = promptProgress.filter(p => !p.completed).length;
   const totalAvailable = availablePrompts.length;
 
+  // Check-out summary for this student (all-time + last 7 days)
+  const coSheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const coLast = coSheet.getLastRow();
+  const myCheckouts = [];
+  const byDestination = {};
+  let weekMinutes = 0;
+  let allMinutes = 0;
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  if (coLast >= 2) {
+    const values = coSheet.getRange(2, 1, coLast - 1, CHECKOUTS_HEADERS.length).getValues();
+    for (const r of values) {
+      if (r[3] !== sub) continue;
+      const outAt = r[7] instanceof Date ? r[7] : new Date(r[7]);
+      const inAt = r[8] instanceof Date ? r[8] : (r[8] ? new Date(r[8]) : null);
+      const status = String(r[9] || '').toLowerCase();
+      const destination = r[4] || 'Other';
+      let minutes = 0;
+      if (status === 'in' && inAt) {
+        minutes = Math.max(0, Math.round((inAt - outAt) / 60000));
+      } else if (status === 'out') {
+        minutes = Math.max(0, Math.round((Date.now() - outAt.getTime()) / 60000));
+      }
+      myCheckouts.push({
+        destination,
+        notes: r[6] || '',
+        checked_out_at: outAt.toISOString(),
+        checked_in_at: inAt ? inAt.toISOString() : '',
+        status,
+        minutes,
+      });
+      byDestination[destination] = (byDestination[destination] || 0) + 1;
+      allMinutes += minutes;
+      if (outAt.getTime() >= sevenDaysAgo) weekMinutes += minutes;
+    }
+  }
+  myCheckouts.sort((a, b) => (a.checked_out_at < b.checked_out_at ? 1 : -1));
+
   // Achievements
   const achievements = [
     { id: 'first', label: 'First response', emoji: '🎉', desc: 'Submitted your first response', earned: totalResponses >= 1 },
@@ -626,6 +666,7 @@ function getStudentDashboard_(claims) {
     { id: 'streak3', label: 'On a roll', emoji: '🔥', desc: '3-day activity streak', earned: streak >= 3 },
     { id: 'streak7', label: 'Week strong', emoji: '💪', desc: '7-day activity streak', earned: streak >= 7 },
     { id: 'allcaught', label: 'All caught up', emoji: '⭐', desc: 'No assignments pending', earned: totalAvailable > 0 && pendingCount === 0 },
+    { id: 'inclass', label: 'Class champion', emoji: '🎯', desc: 'Under 10 mins out of class this week', earned: totalResponses >= 1 && weekMinutes < 10 },
   ];
 
   return {
@@ -646,6 +687,89 @@ function getStudentDashboard_(claims) {
       return aLast < bLast ? 1 : -1;
     }),
     recent_feedback: feedbackEntries,
+    checkouts: {
+      total_trips: myCheckouts.length,
+      total_minutes: allMinutes,
+      week_minutes: weekMinutes,
+      by_destination: byDestination,
+      recent: myCheckouts.slice(0, 5),
+    },
+  };
+}
+
+function getCheckoutLeaderboard_(claims) {
+  const isTeacher = isTeacher_(claims.email);
+  const studentMap = {};
+  const now = Date.now();
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+  // Seed roster from anyone who has responded (so 0-trip students appear).
+  const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const respLast = respSheet.getLastRow();
+  if (respLast >= 2) {
+    const values = respSheet.getRange(2, 1, respLast - 1, RESPONSES_HEADERS.length).getValues();
+    for (const r of values) {
+      const sub = r[4];
+      if (!sub || studentMap[sub]) continue;
+      studentMap[sub] = { sub, email: r[2], name: r[3], trips: 0, minutes: 0 };
+    }
+  }
+
+  // Accumulate checkouts within the 7-day window.
+  const coSheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const coLast = coSheet.getLastRow();
+  if (coLast >= 2) {
+    const values = coSheet.getRange(2, 1, coLast - 1, CHECKOUTS_HEADERS.length).getValues();
+    for (const r of values) {
+      const sub = r[3];
+      if (!sub) continue;
+      if (!studentMap[sub]) studentMap[sub] = { sub, email: r[1], name: r[2], trips: 0, minutes: 0 };
+      const outAt = r[7] instanceof Date ? r[7] : new Date(r[7]);
+      if (outAt.getTime() < sevenDaysAgo) continue;
+      const inAt = r[8] instanceof Date ? r[8] : (r[8] ? new Date(r[8]) : null);
+      const status = String(r[9] || '').toLowerCase();
+      let minutes = 0;
+      if (status === 'in' && inAt) minutes = Math.max(0, Math.round((inAt - outAt) / 60000));
+      else if (status === 'out') minutes = Math.max(0, Math.round((now - outAt.getTime()) / 60000));
+      studentMap[sub].trips++;
+      studentMap[sub].minutes += minutes;
+    }
+  }
+
+  const list = Object.values(studentMap)
+    .sort((a, b) => a.minutes - b.minutes || a.trips - b.trips || String(a.name).localeCompare(String(b.name)));
+  for (let i = 0; i < list.length; i++) list[i].rank = i + 1;
+
+  if (isTeacher) {
+    return {
+      window_days: 7,
+      total_students: list.length,
+      leaderboard: list.map(s => ({
+        rank: s.rank,
+        name: s.name,
+        email: s.email,
+        trips: s.trips,
+        minutes: s.minutes,
+      })),
+    };
+  }
+
+  // Students get a tighter, partially-anonymised view.
+  const myRow = list.find(s => s.sub === claims.sub) || null;
+  const initials = (n) => String(n || '').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
+  return {
+    window_days: 7,
+    total_students: list.length,
+    leaderboard: list.slice(0, 5).map(s => ({
+      rank: s.rank,
+      display_name: s.sub === claims.sub ? s.name : initials(s.name) || 'Anon',
+      trips: s.trips,
+      minutes: s.minutes,
+      is_me: s.sub === claims.sub,
+    })),
+    my_rank: myRow ? myRow.rank : null,
+    my_minutes: myRow ? myRow.minutes : 0,
+    my_trips: myRow ? myRow.trips : 0,
   };
 }
 
