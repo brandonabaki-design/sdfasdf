@@ -160,7 +160,7 @@ function renderPromptsTable(prompts) {
     `;
     tr.querySelector('.row-title').textContent = p.title || '(untitled)';
     tr.querySelector('.type-pill').textContent = TYPE_LABELS[p.type] || p.type;
-    tr.querySelector('.row-time').textContent = new Date(p.created_at).toLocaleString();
+    tr.querySelector('.row-time').textContent = friendlyTime(p.created_at);
     tr.cells[3].textContent = p.response_count;
     tr.cells[4].textContent = p.unique_students;
     tr.querySelector('.row-flagged').textContent = p.flagged_count;
@@ -191,7 +191,7 @@ function renderStudentsTable(students) {
     tr.cells[2].textContent = s.response_count;
     tr.cells[3].textContent = s.prompts_responded;
     tr.querySelector('.row-flagged').textContent = s.flagged_count;
-    tr.querySelector('.row-time').textContent = new Date(s.last_active).toLocaleString();
+    tr.querySelector('.row-time').textContent = friendlyTime(s.last_active);
     tbody.appendChild(tr);
   }
 }
@@ -216,7 +216,7 @@ function renderActivity(items) {
         <em class="activity-target"></em>
       </span>
     `;
-    li.querySelector('.activity-time').textContent = new Date(a.timestamp).toLocaleString();
+    li.querySelector('.activity-time').textContent = friendlyTime(a.timestamp);
     li.querySelector('.activity-who').textContent = a.student_name || a.student_email;
     li.querySelector('.activity-verb').textContent = ' ' + verb + ' ';
     li.querySelector('.activity-target').textContent = a.prompt_title || '(untitled)';

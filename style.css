@@ -15,9 +15,9 @@
 
   /* Text — high-contrast for K-12 readability on dark navy */
   --text: #ffffff;
-  --text-secondary: #f1f5f9;
-  --text-muted: #d1d8e6;
-  --text-dim: #aab4c8;
+  --text-secondary: #f8fafc;
+  --text-muted: #e2e8f0;
+  --text-dim: #c5cdda;
 
   /* Brand accents (Learning Hub palette) */
   --blue: #3b82f6;
@@ -62,10 +62,13 @@ html, body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.75;
 }
-.small { font-size: 13px; }
+.small { font-size: 14px; line-height: 1.5; }
+.muted { color: var(--text-muted); }
+p { margin: 0 0 10px; }
+h1, h2, h3, h4 { letter-spacing: -0.02em; line-height: 1.25; }
 p { margin: 0 0 8px; }
 h1, h2, h3, h4 { letter-spacing: -0.02em; }
 
@@ -197,11 +200,12 @@ body::before {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 14px;
+  padding: 9px 16px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
 }
 .user-chip .user-dot {
   width: 8px;
@@ -967,12 +971,13 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 12px 22px;
-  border-radius: 12px;
+  padding: 13px 24px;
+  border-radius: 14px;
   border: none;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
+  min-height: 44px;
   cursor: pointer;
   transition: all 0.2s ease;
   text-decoration: none;
@@ -1004,13 +1009,15 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
   border: 1px solid var(--border);
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  min-height: 40px;
 }
-.btn-ghost:hover { color: var(--text); border-color: var(--border-bright); background: rgba(255, 255, 255, 0.10); }
+.btn-ghost:hover { color: var(--text); border-color: var(--border-bright); background: rgba(255, 255, 255, 0.12); }
 
 .btn-success {
   background: rgba(16, 185, 129, 0.15);
@@ -1032,10 +1039,11 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
   color: var(--indigo-bright);
   cursor: pointer;
   font-family: inherit;
-  font-size: 13px;
-  padding: 6px 0;
+  font-size: 15px;
+  padding: 8px 0;
   font-weight: 600;
   transition: color 0.15s;
+  min-height: 36px;
 }
 .link-btn:hover { color: white; }
 .link-btn:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -1064,11 +1072,11 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 
 .hero-title {
   font-family: var(--font-heading);
-  font-size: clamp(40px, 7vw, 64px);
+  font-size: clamp(46px, 7.5vw, 76px);
   font-weight: 900;
   letter-spacing: -0.035em;
-  line-height: 1.02;
-  margin: 0 0 18px;
+  line-height: 1.05;
+  margin: 0 0 22px;
 }
 .hero-title .gradient-amber {
   background: linear-gradient(135deg, var(--amber-bright), var(--amber), var(--amber-deep));
@@ -1078,9 +1086,9 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 
 .hero-subtitle {
-  font-size: 18px;
+  font-size: 20px;
   color: var(--text-secondary);
-  line-height: 1.55;
+  line-height: 1.6;
   margin: 0 auto 28px;
   max-width: 520px;
 }
@@ -1171,21 +1179,21 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 .page-title {
   font-family: var(--font-heading);
-  font-size: 38px;
+  font-size: 44px;
   font-weight: 800;
   letter-spacing: -0.028em;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   color: white;
   line-height: 1.1;
 }
-.page-subtitle { color: var(--text-muted); margin: 0; font-size: 16px; line-height: 1.55; }
+.page-subtitle { color: var(--text-muted); margin: 0; font-size: 18px; line-height: 1.6; }
 
 .status-line {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 15px;
   min-height: 1.2em;
   margin: 0 0 20px;
-  font-family: var(--font-mono);
+  font-weight: 500;
 }
 
 /* ============================================================
@@ -1643,10 +1651,10 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 
 .prompt-card h3 {
   font-family: var(--font-heading);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.015em;
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   color: white;
   line-height: 1.3;
 }
@@ -1654,13 +1662,13 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
   color: var(--text-secondary);
   white-space: pre-wrap;
   margin: 0 0 14px;
-  line-height: 1.7;
-  font-size: 16px;
+  line-height: 1.75;
+  font-size: 17px;
 }
 .prompt-card .prompt-teacher,
 .prompt-card .prompt-time { font-family: var(--font-mono); color: var(--text-dim); }
 
-.prompt-card .muted, .prompt-card .small { color: var(--text-muted); font-size: 12px; }
+.prompt-card .muted, .prompt-card .small { color: var(--text-muted); font-size: 14px; }
 
 /* ============================================================
    Student response form
@@ -1673,11 +1681,9 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 .response-form label {
   display: block;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
   margin-bottom: 0;
 }
 .response-form textarea,
@@ -1741,9 +1747,9 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 .response-bubble .response-time {
   margin: 0;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 /* AI feedback (amber) */
@@ -1826,18 +1832,18 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 .panel-title {
   font-family: var(--font-heading);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.015em;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   color: white;
   line-height: 1.25;
 }
 .panel-subtitle {
   color: var(--text-muted);
   margin: 0;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 16px;
+  line-height: 1.6;
 }
 .panel-header { margin-bottom: 20px; }
 .panel-title {
@@ -1852,12 +1858,10 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 
 .panel-form label {
   display: block;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  margin-bottom: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
 }
 
 .prompt-actions {
@@ -1875,9 +1879,9 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 .responses-status {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 15px;
   margin: 0 0 12px;
-  font-family: var(--font-mono);
+  font-weight: 500;
 }
 
 .teacher-response-card {
@@ -1904,7 +1908,7 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
   line-height: 1.55;
   white-space: pre-wrap;
 }
-.teacher-response-card .submission-time { font-family: var(--font-mono); font-size: 12px; }
+.teacher-response-card .submission-time { font-size: 14px; color: var(--text-muted); }
 
 .flag-banner {
   display: inline-block;
@@ -2144,22 +2148,22 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 .prompt-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 12px;
-  font-size: 12px;
+  gap: 16px 22px;
+  margin-bottom: 14px;
+  font-size: 14px;
   color: var(--text-muted);
 }
-.meta-item { display: inline-flex; align-items: center; gap: 6px; }
+.meta-item { display: inline-flex; align-items: baseline; gap: 8px; }
 .meta-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-dim);
 }
-.prompt-teacher, .prompt-time, .prompt-audience, .prompt-closes { font-family: var(--font-mono); }
+.prompt-teacher, .prompt-audience { color: var(--text-secondary); font-weight: 500; }
+.prompt-time, .prompt-closes { color: var(--text-secondary); font-weight: 500; }
 .closes-meta.closed { color: #fda4af; }
-.closes-meta.closed .closes-label { color: #fda4af; }
+.closes-meta.closed .closes-label,
+.closes-meta.closed .prompt-closes { color: #fda4af; }
 
 .closed-banner {
   background: rgba(244, 63, 94, 0.10);
@@ -3060,31 +3064,31 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 15px;
   margin-top: 4px;
 }
 .data-table th {
   text-align: left;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
-  padding: 10px 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 .data-table th.num { text-align: right; }
 .data-table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   vertical-align: middle;
 }
-.data-table td.num { text-align: right; font-family: var(--font-mono); font-weight: 600; }
-.data-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+.data-table td.num { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.data-table tbody tr:hover { background: rgba(255, 255, 255, 0.04); }
 .data-table .row-title { font-weight: 600; color: var(--text); }
-.data-table .row-email,
-.data-table .row-time { font-family: var(--font-mono); color: var(--text-muted); font-size: 12px; }
+.data-table .row-email { font-family: var(--font-mono); color: var(--text-muted); font-size: 13px; }
+.data-table .row-time { color: var(--text-muted); font-size: 14px; }
 .data-table .row-flagged {
   color: var(--text-muted);
 }
@@ -3119,21 +3123,21 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 .activity-feed { list-style: none; padding: 0; margin: 0; }
 .activity-item {
   display: grid;
-  grid-template-columns: 180px 16px 1fr;
+  grid-template-columns: 200px 16px 1fr;
   align-items: center;
-  gap: 12px;
-  padding: 10px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  font-size: 13px;
-  line-height: 1.5;
+  gap: 14px;
+  padding: 14px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 15px;
+  line-height: 1.55;
 }
 .activity-item:last-child { border-bottom: none; }
 .activity-empty { padding: 20px; text-align: center; }
 .activity-time {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-dim);
+  font-size: 14px;
+  color: var(--text-muted);
   white-space: nowrap;
+  font-weight: 500;
 }
 .activity-dot {
   width: 8px;

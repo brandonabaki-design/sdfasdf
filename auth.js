@@ -165,6 +165,37 @@ function handleAuthFailure() {
   document.dispatchEvent(new CustomEvent('aisa:signed-out'));
 }
 
+// Natural-language timestamp for student-friendly display. Returns short
+// strings like "Just now", "12 min ago", "Today at 2:15 PM", "Yesterday at
+// 9:30 AM", "Tuesday at 11 AM", "Mar 14".
+function friendlyTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const diffMin = Math.round((now - d) / 60000);
+
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return diffMin + ' min ago';
+
+  const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, now)) return 'Today at ' + timeStr;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (sameDay(d, yesterday)) return 'Yesterday at ' + timeStr;
+
+  const diffDays = Math.floor((now - d) / (24 * 60 * 60 * 1000));
+  if (diffDays < 7) {
+    return d.toLocaleDateString(undefined, { weekday: 'long' }) + ' at ' + timeStr;
+  }
+  if (d.getFullYear() === now.getFullYear()) {
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 async function api(action, payload) {
   const cfg = window.AISA_CONFIG;
   if (!cfg.APPS_SCRIPT_URL || cfg.APPS_SCRIPT_URL.includes('YOUR_DEPLOYMENT_ID')) {

@@ -144,7 +144,7 @@ function renderPromptCard(p) {
   const card = document.createElement('article');
   card.className = 'prompt-card';
   card.dataset.promptId = p.id;
-  const created = new Date(p.created_at).toLocaleString();
+  const created = friendlyTime(p.created_at);
   const closesAt = p.closes_at ? new Date(p.closes_at) : null;
   const closed = closesAt && !isNaN(closesAt.getTime()) && closesAt < new Date();
   const type = (p.type || 'open').toLowerCase();
@@ -185,7 +185,7 @@ function renderPromptCard(p) {
   if (closesAt && !isNaN(closesAt.getTime())) {
     const closesMeta = card.querySelector('.closes-meta');
     closesMeta.hidden = false;
-    closesMeta.querySelector('.prompt-closes').textContent = closesAt.toLocaleString();
+    closesMeta.querySelector('.prompt-closes').textContent = friendlyTime(closesAt.toISOString());
     if (closed) {
       closesMeta.classList.add('closed');
       closesMeta.querySelector('.closes-label').textContent = 'Closed';
@@ -249,7 +249,7 @@ function renderResponsesInCard(card, promptId) {
       <p class="muted small response-time"></p>
     `;
     bubble.querySelector('.response-body').textContent = r.body;
-    bubble.querySelector('.response-time').textContent = new Date(r.created_at).toLocaleString();
+    bubble.querySelector('.response-time').textContent = friendlyTime(r.created_at);
     container.appendChild(bubble);
 
     if (r.ai_feedback) {
@@ -456,7 +456,7 @@ function renderAssignmentRow(p) {
   if (closesAt && !isNaN(closesAt.getTime())) {
     const closes = row.querySelector('.closes');
     closes.hidden = false;
-    closes.querySelector('.closes-time').textContent = closesAt.toLocaleString();
+    closes.querySelector('.closes-time').textContent = friendlyTime(closesAt.toISOString());
     if (closed) closes.querySelector('.closes-label').textContent = 'Closed';
   }
 

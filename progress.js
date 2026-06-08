@@ -393,7 +393,7 @@ function renderFeedback(entries) {
       </p>
     `;
     card.querySelector('.feedback-on').textContent = e.prompt_title || '(untitled)';
-    card.querySelector('.feedback-time').textContent = new Date(e.created_at).toLocaleString();
+    card.querySelector('.feedback-time').textContent = friendlyTime(e.created_at);
     card.querySelector('.feedback-body').textContent = e.feedback;
     stack.appendChild(card);
   }
@@ -435,7 +435,7 @@ function renderPromptProgress(items) {
       p.response_count === 1 ? '1 response' :
       `${p.response_count} responses`;
     row.querySelector('.progress-last').textContent = p.last_response_at
-      ? 'Last: ' + new Date(p.last_response_at).toLocaleDateString()
+      ? 'Last: ' + friendlyTime(p.last_response_at)
       : '';
     list.appendChild(row);
   }

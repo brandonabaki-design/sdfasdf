@@ -390,7 +390,7 @@ function renderTeacherPromptCard(p) {
   const card = document.createElement('article');
   card.className = 'prompt-card teacher-prompt-card';
   card.dataset.promptId = p.id;
-  const created = new Date(p.created_at).toLocaleString();
+  const created = friendlyTime(p.created_at);
 
   const closesAt = p.closes_at ? new Date(p.closes_at) : null;
   const closed = closesAt && !isNaN(closesAt.getTime()) && closesAt < new Date();
@@ -440,7 +440,7 @@ function renderTeacherPromptCard(p) {
   if (closesAt && !isNaN(closesAt.getTime())) {
     const closesMeta = card.querySelector('.closes-meta');
     closesMeta.hidden = false;
-    closesMeta.querySelector('.prompt-closes').textContent = closesAt.toLocaleString();
+    closesMeta.querySelector('.prompt-closes').textContent = friendlyTime(closesAt.toISOString());
     if (closed) {
       closesMeta.classList.add('closed');
       closesMeta.querySelector('.closes-label').textContent = 'Closed';
@@ -527,7 +527,7 @@ async function loadResponsesForPrompt(card, promptId) {
 function renderTeacherResponseCard(r) {
   const card = document.createElement('div');
   card.className = 'teacher-response-card' + (r.flagged ? ' flagged' : '');
-  const submitted = new Date(r.created_at).toLocaleString();
+  const submitted = friendlyTime(r.created_at);
 
   const feedbackHtml = r.ai_feedback
     ? (r.flagged
@@ -597,7 +597,7 @@ function renderStudentRow(s, promptId, card) {
   row.dataset.email = s.student_email;
   const initials = (s.student_name || s.student_email || '?')
     .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
-  const last = s.last_at ? new Date(s.last_at).toLocaleString() : '';
+  const last = s.last_at ? friendlyTime(s.last_at) : '';
   row.innerHTML = `
     <span class="student-avatar"></span>
     <span class="student-info">
@@ -688,7 +688,7 @@ function renderStudentThread(container, student, thread) {
     if (r.flagged) {
       bubble.querySelector('.flag-banner').textContent = 'FLAGGED — ' + (r.flag_reason || 'review needed');
     }
-    bubble.querySelector('.thread-time').textContent = new Date(r.created_at).toLocaleString();
+    bubble.querySelector('.thread-time').textContent = friendlyTime(r.created_at);
     bubble.querySelector('.thread-response').textContent = r.body;
     if (r.ai_feedback) {
       bubble.querySelector('.ai-body').textContent = r.ai_feedback;
@@ -736,7 +736,7 @@ async function generateSummary(prompt, button, panel) {
 }
 
 function renderStructuredSummary(container, s) {
-  const generated = new Date(s.generated_at).toLocaleString();
+  const generated = friendlyTime(s.generated_at);
   if (s.type === 'multiple_choice' || s.type === 'poll') {
     const correctLine = (s.type === 'multiple_choice' && typeof s.correct_percent === 'number')
       ? `<p class="summary-overview"><strong>${s.correct_percent}%</strong> of ${s.total} students picked the correct answer.</p>` : '';
@@ -803,7 +803,7 @@ function renderSummary(container, s) {
     </div>
   `;
 
-  const meta = `${s.response_count} response${s.response_count === 1 ? '' : 's'} · generated ${new Date(s.generated_at).toLocaleString()}`;
+  const meta = `${s.response_count} response${s.response_count === 1 ? '' : 's'} · generated ${friendlyTime(s.generated_at)}`;
   container.querySelector('.summary-meta').textContent = meta;
   container.querySelector('.summary-overview').textContent = s.overview || '(no overview)';
 
@@ -919,7 +919,7 @@ function renderFlaggedItem(r) {
   item.querySelector('.prompt-context strong').textContent = r.prompt_title || '(untitled)';
   item.querySelector('.response-body').textContent = r.body || '';
   item.querySelector('.reason-text').textContent = r.flag_reason || 'No reason recorded.';
-  item.querySelector('.submission-time').textContent = new Date(r.created_at).toLocaleString();
+  item.querySelector('.submission-time').textContent = friendlyTime(r.created_at);
 
   const resolveBtn = item.querySelector('.resolve-btn');
   resolveBtn.addEventListener('click', async () => {
@@ -998,7 +998,7 @@ function renderDraftCard(d) {
     </div>
   `;
   card.querySelector('.draft-from').textContent = d.shared_from || 'Unknown';
-  card.querySelector('.draft-time').textContent = new Date(d.created_at).toLocaleString();
+  card.querySelector('.draft-time').textContent = friendlyTime(d.created_at);
   card.querySelector('.draft-title').textContent = d.title || '(untitled)';
   card.querySelector('.draft-preview').textContent = d.body || '';
 
