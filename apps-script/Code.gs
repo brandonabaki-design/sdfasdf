@@ -138,6 +138,14 @@ function doPost(e) {
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_(updatePrompt_(claims, payload));
 
+      case 'get_teacher_dashboard':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, dashboard: getTeacherDashboard_(claims) });
+
+      case 'export_csv':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, csv: exportCsv_(claims, payload.kind || 'responses'), kind: payload.kind || 'responses' });
+
       case 'list_responses_for_prompt':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, responses: listResponsesForPrompt_(payload.prompt_id || '') });
@@ -465,6 +473,248 @@ function publishDraft_(claims, payload) {
     }
   }
   return { ok: false, error: 'not found' };
+}
+
+function getMyPromptRows_(claims) {
+  const myEmail = String(claims.email).toLowerCase();
+  const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, PROMPTS_HEADERS.length).getValues();
+  return values.filter(r => String(r[2]).toLowerCase() === myEmail);
+}
+
+function getTeacherDashboard_(claims) {
+  const myEmail = String(claims.email).toLowerCase();
+  const myRows = getMyPromptRows_(claims);
+
+  const promptList = myRows
+    .filter(r => String(r[5]).toLowerCase() !== 'discarded')
+    .map(r => ({
+      id: r[0],
+      created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+      title: r[3],
+      status: String(r[5] || 'active').toLowerCase(),
+      closes_at: r[6] instanceof Date ? r[6].toISOString() : (r[6] ? String(r[6]) : ''),
+      audience: r[7] || '',
+      type: String(r[9] || 'open').toLowerCase(),
+    }));
+  const myPromptIds = new Set(promptList.map(p => p.id));
+  const titleByPromptId = {};
+  for (const p of promptList) titleByPromptId[p.id] = p.title;
+
+  // Responses for my prompts
+  const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const respLast = respSheet.getLastRow();
+  const myResponses = [];
+  if (respLast >= 2) {
+    const values = respSheet.getRange(2, 1, respLast - 1, RESPONSES_HEADERS.length).getValues();
+    for (const r of values) {
+      if (myPromptIds.has(r[5])) {
+        myResponses.push({
+          id: r[0],
+          created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+          student_email: r[2],
+          student_name: r[3],
+          google_sub: r[4],
+          prompt_id: r[5],
+          prompt_title: r[6],
+          flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
+          resolved: r[13] === true || String(r[13]).toLowerCase() === 'true',
+        });
+      }
+    }
+  }
+
+  // Per-prompt aggregation
+  const promptStats = {};
+  for (const p of promptList) {
+    promptStats[p.id] = { responses: 0, flagged: 0, students: new Set() };
+  }
+  for (const r of myResponses) {
+    const s = promptStats[r.prompt_id];
+    if (!s) continue;
+    s.responses++;
+    if (r.flagged) s.flagged++;
+    s.students.add(r.google_sub || r.student_email);
+  }
+  const promptsForUI = promptList.map(p => {
+    const s = promptStats[p.id];
+    return Object.assign({}, p, {
+      response_count: s.responses,
+      unique_students: s.students.size,
+      flagged_count: s.flagged,
+    });
+  }).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+
+  // Per-student aggregation
+  const studentStats = {};
+  for (const r of myResponses) {
+    const key = r.google_sub || r.student_email;
+    if (!studentStats[key]) {
+      studentStats[key] = {
+        email: r.student_email,
+        name: r.student_name,
+        google_sub: r.google_sub,
+        response_count: 0,
+        flagged_count: 0,
+        prompts: new Set(),
+        last_active: r.created_at,
+      };
+    }
+    studentStats[key].response_count++;
+    if (r.flagged) studentStats[key].flagged_count++;
+    studentStats[key].prompts.add(r.prompt_id);
+    if (r.created_at > studentStats[key].last_active) studentStats[key].last_active = r.created_at;
+  }
+  const studentsForUI = Object.values(studentStats).map(s => ({
+    email: s.email,
+    name: s.name,
+    google_sub: s.google_sub,
+    response_count: s.response_count,
+    flagged_count: s.flagged_count,
+    prompts_responded: s.prompts.size,
+    last_active: s.last_active,
+  })).sort((a, b) => (a.last_active < b.last_active ? 1 : -1));
+
+  // Recent activity (last 25 across responses + checkouts where I was notified)
+  const activity = myResponses.slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  const activityItems = activity.slice(0, 25).map(r => ({
+    type: r.flagged ? 'flag' : 'response',
+    timestamp: r.created_at,
+    student_email: r.student_email,
+    student_name: r.student_name,
+    prompt_title: r.prompt_title,
+  }));
+
+  // Pull checkouts notified to me
+  const coSheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+  const coLast = coSheet.getLastRow();
+  let checkoutsForMe = [];
+  if (coLast >= 2) {
+    const values = coSheet.getRange(2, 1, coLast - 1, CHECKOUTS_HEADERS.length).getValues();
+    checkoutsForMe = values
+      .filter(r => String(r[5] || '').toLowerCase() === myEmail)
+      .map(r => ({
+        id: r[0],
+        student_email: r[1],
+        student_name: r[2],
+        destination: r[4],
+        notes: r[6],
+        checked_out_at: r[7] instanceof Date ? r[7].toISOString() : String(r[7]),
+        checked_in_at: r[8] instanceof Date ? r[8].toISOString() : (r[8] ? String(r[8]) : ''),
+        status: r[9] || 'in',
+      }));
+  }
+
+  return {
+    summary: {
+      total_prompts: promptList.length,
+      total_responses: myResponses.length,
+      total_students: studentsForUI.length,
+      flagged_count: myResponses.filter(r => r.flagged).length,
+      unresolved_flagged: myResponses.filter(r => r.flagged && !r.resolved).length,
+      total_checkouts: checkoutsForMe.length,
+      active_checkouts: checkoutsForMe.filter(c => String(c.status).toLowerCase() === 'out').length,
+    },
+    prompts: promptsForUI,
+    students: studentsForUI,
+    activity: activityItems,
+    checkouts_for_me: checkoutsForMe.sort((a, b) => (a.checked_out_at < b.checked_out_at ? 1 : -1)),
+  };
+}
+
+function exportCsv_(claims, kind) {
+  const myEmail = String(claims.email).toLowerCase();
+  const myRows = getMyPromptRows_(claims);
+  const myPromptIds = new Set(myRows.map(r => r[0]));
+
+  let rows = [];
+  if (kind === 'responses') {
+    rows.push(['created_at', 'student_email', 'student_name', 'prompt_title', 'body', 'response_type', 'option_index', 'rating_value', 'ai_feedback', 'flagged', 'flag_reason', 'resolved']);
+    const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
+      for (const r of values) {
+        if (!myPromptIds.has(r[5])) continue;
+        rows.push([
+          r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+          r[2], r[3], r[6], r[7],
+          r[14] || 'open', r[15] || '', r[16] || '',
+          r[8] || '',
+          (r[11] === true || String(r[11]).toLowerCase() === 'true') ? 'TRUE' : 'FALSE',
+          r[12] || '',
+          (r[13] === true || String(r[13]).toLowerCase() === 'true') ? 'TRUE' : 'FALSE',
+        ]);
+      }
+    }
+  } else if (kind === 'prompts') {
+    rows.push(['created_at', 'title', 'body', 'type', 'status', 'closes_at', 'audience', 'options', 'correct_option', 'rating_scale']);
+    for (const r of myRows) {
+      rows.push([
+        r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+        r[3], r[4],
+        String(r[9] || 'open').toLowerCase(),
+        r[5], r[6] || '', r[7] || '',
+        r[10] || '', r[11] || '', r[12] || '',
+      ]);
+    }
+  } else if (kind === 'students') {
+    rows.push(['email', 'name', 'response_count', 'flagged_count', 'prompts_responded', 'last_active']);
+    const dash = getTeacherDashboard_(claims);
+    for (const s of dash.students) {
+      rows.push([s.email, s.name, s.response_count, s.flagged_count, s.prompts_responded, s.last_active]);
+    }
+  } else if (kind === 'flagged') {
+    rows.push(['created_at', 'student_email', 'student_name', 'prompt_title', 'response_body', 'flag_reason', 'resolved']);
+    const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
+      for (const r of values) {
+        if (!myPromptIds.has(r[5])) continue;
+        const flagged = r[11] === true || String(r[11]).toLowerCase() === 'true';
+        if (!flagged) continue;
+        rows.push([
+          r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+          r[2], r[3], r[6], r[7], r[12] || '',
+          (r[13] === true || String(r[13]).toLowerCase() === 'true') ? 'TRUE' : 'FALSE',
+        ]);
+      }
+    }
+  } else if (kind === 'checkouts') {
+    rows.push(['student_email', 'student_name', 'destination', 'teacher_email', 'notes', 'checked_out_at', 'checked_in_at', 'status']);
+    const sheet = getOrCreateSheet_(CHECKOUTS_SHEET, CHECKOUTS_HEADERS);
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const values = sheet.getRange(2, 1, lastRow - 1, CHECKOUTS_HEADERS.length).getValues();
+      for (const r of values) {
+        if (String(r[5] || '').toLowerCase() !== myEmail) continue;
+        rows.push([
+          r[1], r[2], r[4], r[5], r[6],
+          r[7] instanceof Date ? r[7].toISOString() : String(r[7]),
+          r[8] instanceof Date ? r[8].toISOString() : (r[8] ? String(r[8]) : ''),
+          r[9] || '',
+        ]);
+      }
+    }
+  } else {
+    throw new Error('unknown export kind: ' + kind);
+  }
+  return rowsToCsv_(rows);
+}
+
+function rowsToCsv_(rows) {
+  return rows.map(row =>
+    row.map(cell => {
+      const s = (cell == null) ? '' : String(cell);
+      if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }).join(',')
+  ).join('\n');
 }
 
 function updatePrompt_(claims, payload) {

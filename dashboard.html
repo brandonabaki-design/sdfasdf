@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AISA Hub · Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-blobs" aria-hidden="true">
+    <div class="bg-blob b1"></div>
+    <div class="bg-blob b2"></div>
+    <div class="bg-blob b3"></div>
+  </div>
+
+  <nav class="topbar">
+    <a href="index.html" class="brand">
+      <span class="brand-mark" aria-hidden="true">🦁</span>
+      <span class="brand-text">
+        <span class="brand-name">AISA</span>
+        <span class="brand-sub">Dashboard</span>
+      </span>
+    </a>
+
+    <div class="topbar-meta">
+      <a href="teacher.html" class="btn btn-ghost">← Teacher Studio</a>
+      <span id="user-chip" class="user-chip">
+        <span class="user-dot"></span>
+        <span id="user-name"></span>
+        <span class="muted">·</span>
+        <span id="user-email"></span>
+      </span>
+      <button id="sign-out" class="btn btn-ghost">Sign out</button>
+    </div>
+  </nav>
+
+  <main class="container container-wide">
+    <section id="signin-container" class="hero">
+      <div class="hero-content">
+        <h1 class="hero-title font-heading">
+          <span class="gradient-amber">Dashboard</span>
+        </h1>
+        <p class="hero-subtitle">
+          A comprehensive view of every prompt you've published, every student response,
+          and every check-out routed to you. Download anything as CSV.
+        </p>
+        <p id="status" class="hero-status">
+          Sign in with your <strong>aisa.sch.ae</strong> teacher account to continue.
+        </p>
+        <div class="signin-wrap">
+          <div id="g-signin-button"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="signed-in" hidden>
+      <header class="page-header">
+        <div>
+          <h2 class="page-title font-heading">Your dashboard</h2>
+          <p class="page-subtitle">Everything you've published, everyone who responded.</p>
+        </div>
+        <button type="button" class="btn btn-ghost" id="refresh-btn">Refresh</button>
+      </header>
+
+      <section id="role-loading" class="role-loading">Loading...</section>
+
+      <section id="not-teacher" class="not-teacher" hidden>
+        <h3 class="font-heading">No teacher access</h3>
+        <p>Your account isn't on the teacher allow-list.</p>
+      </section>
+
+      <section id="dashboard-content" hidden>
+        <!-- KPI cards -->
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <!-- Downloads -->
+        <div class="panel downloads-panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Download your data</h2>
+            <p class="panel-subtitle">Get a CSV snapshot — only data you own (your prompts, your students' responses, your check-outs).</p>
+          </header>
+          <div class="download-row" id="download-row"></div>
+        </div>
+
+        <!-- By prompt -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">By prompt</h2>
+            <p class="panel-subtitle">Every active prompt with its response counts and flagged status.</p>
+          </header>
+          <div class="table-wrap">
+            <table class="data-table" id="prompts-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Type</th>
+                  <th>Created</th>
+                  <th class="num">Responses</th>
+                  <th class="num">Students</th>
+                  <th class="num">Flagged</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- By student -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">By student</h2>
+            <p class="panel-subtitle">Roster of everyone who has responded to any of your prompts.</p>
+          </header>
+          <div class="table-wrap">
+            <table class="data-table" id="students-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th class="num">Responses</th>
+                  <th class="num">Prompts</th>
+                  <th class="num">Flagged</th>
+                  <th>Last active</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent activity -->
+        <div class="panel">
+          <header class="panel-header">
+            <h2 class="panel-title font-heading">Recent activity</h2>
+            <p class="panel-subtitle">Last 25 events from your students.</p>
+          </header>
+          <ul class="activity-feed" id="activity-feed"></ul>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <a href="teacher.html" class="footer-link">← Teacher Studio</a>
+    <span class="muted small" style="margin: 0 8px;">·</span>
+    <a href="index.html" class="footer-link">Student view</a>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="dashboard.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
+</body>
+</html>
