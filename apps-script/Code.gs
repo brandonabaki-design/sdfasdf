@@ -14,8 +14,9 @@ const CHECKOUTS_SHEET = 'CheckOuts';
 const CHECKOUTS_HEADERS = ['id', 'student_email', 'student_name', 'google_sub', 'destination', 'teacher_email', 'notes', 'checked_out_at', 'checked_in_at', 'status', 'warning_sent'];
 const DEFAULT_OVERDUE_MINUTES = 10;
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
-const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status', 'closes_at', 'audience', 'shared_from'];
-const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason', 'resolved'];
+const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status', 'closes_at', 'audience', 'shared_from', 'type', 'options_json', 'correct_option', 'rating_scale'];
+const RESPONSES_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'prompt_id', 'prompt_title', 'body', 'ai_feedback', 'ai_reviewed_at', 'ai_model', 'flagged', 'flag_reason', 'resolved', 'response_type', 'option_index', 'rating_value'];
+const VALID_PROMPT_TYPES = ['open', 'multiple_choice', 'acknowledgment', 'rating', 'poll'];
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const REVIEW_SYSTEM_PROMPT =
   "You are a supportive teacher reviewing a student's response to a class prompt. " +
@@ -103,7 +104,18 @@ function doPost(e) {
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({
           ok: true,
-          prompt: createPrompt_(claims.email, payload.title || '', payload.body || '', payload.closes_at || '', payload.audience || '', '', 'active'),
+          prompt: createPrompt_(claims.email, {
+            title: payload.title || '',
+            body: payload.body || '',
+            closes_at: payload.closes_at || '',
+            audience: payload.audience || '',
+            shared_from: '',
+            status: 'active',
+            type: payload.type || 'open',
+            options: payload.options || [],
+            correct_option: payload.correct_option,
+            rating_scale: payload.rating_scale,
+          }),
         });
 
       case 'share_prompt':
@@ -149,8 +161,15 @@ function doPost(e) {
       case 'submit_response':
         return jsonOut_({
           ok: true,
-          response: submitResponse_(claims, payload.prompt_id || '', payload.body || ''),
+          response: submitResponse_(claims, payload),
         });
+
+      case 'get_prompt_summary':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, summary: getStructuredSummary_(payload.prompt_id || '') });
+
+      case 'get_poll_results':
+        return jsonOut_({ ok: true, results: getPollResults_(payload.prompt_id || '') });
 
       case 'list_my_responses':
         return jsonOut_({ ok: true, responses: listResponsesForStudent_(claims.sub) });
@@ -248,6 +267,10 @@ function listActivePrompts_(claims) {
       closes_at: r[6] instanceof Date ? r[6].toISOString() : (r[6] ? String(r[6]) : ''),
       audience: r[7] || '',
       shared_from: r[8] || '',
+      type: String(r[9] || 'open').toLowerCase(),
+      options: parsePromptOptions_(r[10]),
+      correct_option: r[11] || null,
+      rating_scale: r[12] || null,
       completed: completedSet ? completedSet.has(r[0]) : false,
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
@@ -319,6 +342,10 @@ function getPromptById_(promptId) {
         closes_at: r[6] instanceof Date ? r[6].toISOString() : (r[6] ? String(r[6]) : ''),
         audience: r[7] || '',
         shared_from: r[8] || '',
+        type: String(r[9] || 'open').toLowerCase(),
+        options: parsePromptOptions_(r[10]),
+        correct_option: r[11] || null,
+        rating_scale: r[12] || null,
       };
     }
   }
@@ -361,6 +388,10 @@ function sharePrompt_(sender, promptId, recipientEmail) {
     prompt.closes_at || '',
     prompt.audience || '',
     sender.email,
+    String(prompt.type || 'open').toLowerCase(),
+    JSON.stringify(prompt.options || []),
+    prompt.correct_option || '',
+    prompt.rating_scale || '',
   ]);
   return { ok: true, draft_id: id, recipient: recipient };
 }
@@ -381,6 +412,10 @@ function listDraftsForTeacher_(teacherEmail) {
       closes_at: r[6] instanceof Date ? r[6].toISOString() : (r[6] ? String(r[6]) : ''),
       audience: r[7] || '',
       shared_from: r[8] || '',
+      type: String(r[9] || 'open').toLowerCase(),
+      options: parsePromptOptions_(r[10]),
+      correct_option: r[11] || null,
+      rating_scale: r[12] || null,
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
@@ -444,14 +479,42 @@ function discardDraft_(teacherEmail, draftId) {
   return { ok: false, error: 'not found' };
 }
 
-function submitResponse_(claims, promptId, body) {
+function submitResponse_(claims, payload) {
+  const promptId = payload.prompt_id || '';
   if (!promptId) throw new Error('prompt_id is required');
-  if (!String(body).trim()) throw new Error('response is empty');
 
   const prompt = getPromptById_(promptId);
   if (!prompt) throw new Error('prompt not found');
   if (String(prompt.status).toLowerCase() !== 'active') throw new Error('prompt is not active');
   if (isPromptClosed_(prompt)) throw new Error('this prompt has closed');
+
+  const type = String(prompt.type || 'open').toLowerCase();
+  let body = '';
+  let optionIndex = '';
+  let ratingValue = '';
+  let runAi = false;
+
+  if (type === 'open') {
+    body = String(payload.body || '').trim();
+    if (!body) throw new Error('response is empty');
+    runAi = true;
+  } else if (type === 'multiple_choice' || type === 'poll') {
+    const options = prompt.options || [];
+    const idx = parseInt(payload.option_index, 10);
+    if (!idx || idx < 1 || idx > options.length) throw new Error('invalid option');
+    optionIndex = idx;
+    body = options[idx - 1];
+  } else if (type === 'rating') {
+    const max = parseInt(prompt.rating_scale, 10) || 5;
+    const val = parseInt(payload.rating_value, 10);
+    if (!val || val < 1 || val > max) throw new Error('invalid rating');
+    ratingValue = val;
+    body = val + '/' + max;
+  } else if (type === 'acknowledgment') {
+    body = 'Acknowledged';
+  } else {
+    throw new Error('unknown type: ' + type);
+  }
 
   const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
   const id = Utilities.getUuid();
@@ -471,6 +534,9 @@ function submitResponse_(claims, promptId, body) {
     false,
     '',
     false,
+    type,
+    optionIndex,
+    ratingValue,
   ]);
   const rowIndex = sheet.getLastRow();
 
@@ -478,31 +544,31 @@ function submitResponse_(claims, promptId, body) {
   let aiReviewedAt = '';
   let aiModel = '';
   let flagged = false;
-  let flagReason = '';
 
-  try {
-    const review = getGeminiReview_(prompt, body);
-    const reviewedDate = new Date();
-    aiReviewedAt = reviewedDate.toISOString();
-
-    if (review.distress_detected) {
-      flagged = true;
-      flagReason = review.distress_reason || 'Distress signals detected';
-      aiModel = review.model + ' (flagged)';
-      aiFeedback = PropertiesService.getScriptProperties().getProperty('STUDENT_RESOURCE_MESSAGE') || DEFAULT_RESOURCE_MESSAGE;
-      sheet.getRange(rowIndex, 9, 1, 5).setValues([[aiFeedback, reviewedDate, aiModel, true, flagReason]]);
-      try {
-        sendDistressAlert_(prompt, claims, body, flagReason);
-      } catch (mailErr) {
-        Logger.log('Failed to send distress alert: ' + mailErr);
+  if (runAi) {
+    try {
+      const review = getGeminiReview_(prompt, body);
+      const reviewedDate = new Date();
+      aiReviewedAt = reviewedDate.toISOString();
+      if (review.distress_detected) {
+        flagged = true;
+        const flagReason = review.distress_reason || 'Distress signals detected';
+        aiModel = review.model + ' (flagged)';
+        aiFeedback = PropertiesService.getScriptProperties().getProperty('STUDENT_RESOURCE_MESSAGE') || DEFAULT_RESOURCE_MESSAGE;
+        sheet.getRange(rowIndex, 9, 1, 5).setValues([[aiFeedback, reviewedDate, aiModel, true, flagReason]]);
+        try {
+          sendDistressAlert_(prompt, claims, body, flagReason);
+        } catch (mailErr) {
+          Logger.log('Failed to send distress alert: ' + mailErr);
+        }
+      } else {
+        aiFeedback = review.feedback;
+        aiModel = review.model;
+        sheet.getRange(rowIndex, 9, 1, 5).setValues([[aiFeedback, reviewedDate, aiModel, false, '']]);
       }
-    } else {
-      aiFeedback = review.feedback;
-      aiModel = review.model;
-      sheet.getRange(rowIndex, 9, 1, 5).setValues([[aiFeedback, reviewedDate, aiModel, false, '']]);
+    } catch (err) {
+      Logger.log('Gemini review failed: ' + err);
     }
-  } catch (err) {
-    Logger.log('Gemini review failed: ' + err);
   }
 
   return {
@@ -516,7 +582,86 @@ function submitResponse_(claims, promptId, body) {
     ai_reviewed_at: aiReviewedAt,
     ai_model: aiModel,
     flagged,
+    response_type: type,
+    option_index: optionIndex || null,
+    rating_value: ratingValue || null,
   };
+}
+
+function getStructuredSummary_(promptId) {
+  const prompt = getPromptById_(promptId);
+  if (!prompt) throw new Error('prompt not found');
+  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  const responses = [];
+  if (lastRow >= 2) {
+    const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
+    for (const r of values) {
+      if (r[5] !== promptId) continue;
+      responses.push({
+        student_email: r[2],
+        student_name: r[3],
+        body: r[7],
+        option_index: parseInt(r[15], 10) || null,
+        rating_value: parseInt(r[16], 10) || null,
+      });
+    }
+  }
+  const type = String(prompt.type || 'open').toLowerCase();
+  const result = {
+    type,
+    total: responses.length,
+    prompt_title: prompt.title,
+    generated_at: new Date().toISOString(),
+  };
+
+  if (type === 'multiple_choice' || type === 'poll') {
+    const options = prompt.options || [];
+    const counts = options.map(() => 0);
+    for (const r of responses) {
+      if (r.option_index && r.option_index >= 1 && r.option_index <= options.length) {
+        counts[r.option_index - 1]++;
+      }
+    }
+    result.options = options.map((label, i) => ({
+      label,
+      index: i + 1,
+      count: counts[i],
+      percent: responses.length ? Math.round((counts[i] / responses.length) * 100) : 0,
+      is_correct: type === 'multiple_choice' && prompt.correct_option && parseInt(prompt.correct_option, 10) === (i + 1),
+    }));
+    if (type === 'multiple_choice' && prompt.correct_option) {
+      const correctIdx = parseInt(prompt.correct_option, 10);
+      const correctCount = counts[correctIdx - 1] || 0;
+      result.correct_percent = responses.length ? Math.round((correctCount / responses.length) * 100) : 0;
+    }
+  } else if (type === 'rating') {
+    const max = parseInt(prompt.rating_scale, 10) || 5;
+    const values = responses.map(r => r.rating_value).filter(v => v);
+    const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const buckets = Array(max).fill(0);
+    for (const v of values) {
+      if (v >= 1 && v <= max) buckets[v - 1]++;
+    }
+    result.rating_scale = max;
+    result.average = Math.round(avg * 10) / 10;
+    result.distribution = buckets.map((count, i) => ({
+      value: i + 1,
+      count,
+      percent: values.length ? Math.round((count / values.length) * 100) : 0,
+    }));
+  } else if (type === 'acknowledgment') {
+    result.acknowledged_by = responses.map(r => ({ name: r.student_name, email: r.student_email }));
+  }
+  return result;
+}
+
+function getPollResults_(promptId) {
+  const prompt = getPromptById_(promptId);
+  if (!prompt) throw new Error('prompt not found');
+  if (String(prompt.type || '').toLowerCase() !== 'poll') return { type: 'poll', total: 0, options: [] };
+  const summary = getStructuredSummary_(promptId);
+  return { type: 'poll', total: summary.total, options: summary.options };
 }
 
 function sendDistressAlert_(prompt, claims, responseBody, flagReason) {
@@ -819,6 +964,9 @@ function getStudentThread_(promptId, googleSub, studentEmail) {
       flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
       flag_reason: r[12] || '',
       resolved: r[13] === true || String(r[13]).toLowerCase() === 'true',
+      response_type: String(r[14] || 'open').toLowerCase(),
+      option_index: parseInt(r[15], 10) || null,
+      rating_value: parseInt(r[16], 10) || null,
     }))
     .sort((a, b) => (a.created_at > b.created_at ? 1 : -1));
   return { prompt: prompt, responses: responses };
@@ -843,6 +991,9 @@ function listResponsesForPrompt_(promptId) {
       ai_model: r[10] || '',
       flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
       flag_reason: r[12] || '',
+      response_type: String(r[14] || 'open').toLowerCase(),
+      option_index: parseInt(r[15], 10) || null,
+      rating_value: parseInt(r[16], 10) || null,
     }))
     .sort((a, b) => {
       if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
@@ -867,13 +1018,43 @@ function listResponsesForStudent_(googleSub) {
       ai_reviewed_at: r[9] instanceof Date ? r[9].toISOString() : (r[9] ? String(r[9]) : ''),
       ai_model: r[10] || '',
       flagged: r[11] === true || String(r[11]).toLowerCase() === 'true',
-      // flag_reason (r[12]) is intentionally not returned to students.
+      response_type: String(r[14] || 'open').toLowerCase(),
+      option_index: parseInt(r[15], 10) || null,
+      rating_value: parseInt(r[16], 10) || null,
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
-function createPrompt_(teacherEmail, title, body, closesAt, audience, sharedFrom, status) {
-  if (!String(title).trim() && !String(body).trim()) throw new Error('prompt is empty');
+function createPrompt_(teacherEmail, opts) {
+  opts = opts || {};
+  const title = String(opts.title || '').trim();
+  const body = String(opts.body || '').trim();
+  const type = String(opts.type || 'open').toLowerCase();
+  if (VALID_PROMPT_TYPES.indexOf(type) === -1) throw new Error('unknown type: ' + type);
+  if (!title && !body) throw new Error('prompt is empty');
+
+  // Per-type validation
+  let optionsArr = [];
+  let optionsJson = '';
+  let correctOption = '';
+  let ratingScale = '';
+
+  if (type === 'multiple_choice' || type === 'poll') {
+    optionsArr = (Array.isArray(opts.options) ? opts.options : [])
+      .map(s => String(s || '').trim())
+      .filter(Boolean);
+    if (optionsArr.length < 2) throw new Error('at least 2 options required');
+    if (optionsArr.length > 8) throw new Error('at most 8 options');
+    optionsJson = JSON.stringify(optionsArr);
+    if (type === 'multiple_choice' && opts.correct_option) {
+      const idx = parseInt(opts.correct_option, 10);
+      if (idx >= 1 && idx <= optionsArr.length) correctOption = idx;
+    }
+  } else if (type === 'rating') {
+    const scale = parseInt(opts.rating_scale, 10);
+    ratingScale = (scale >= 2 && scale <= 10) ? scale : 5;
+  }
+
   const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
   const id = Utilities.getUuid();
   const createdAt = new Date();
@@ -883,10 +1064,14 @@ function createPrompt_(teacherEmail, title, body, closesAt, audience, sharedFrom
     teacherEmail,
     title,
     body,
-    status || 'active',
-    closesAt || '',
-    audience || '',
-    sharedFrom || '',
+    opts.status || 'active',
+    opts.closes_at || '',
+    opts.audience || '',
+    opts.shared_from || '',
+    type,
+    optionsJson,
+    correctOption,
+    ratingScale,
   ]);
   return {
     id,
@@ -894,11 +1079,24 @@ function createPrompt_(teacherEmail, title, body, closesAt, audience, sharedFrom
     teacher_email: teacherEmail,
     title,
     body,
-    status: status || 'active',
-    closes_at: closesAt || '',
-    audience: audience || '',
-    shared_from: sharedFrom || '',
+    status: opts.status || 'active',
+    closes_at: opts.closes_at || '',
+    audience: opts.audience || '',
+    shared_from: opts.shared_from || '',
+    type,
+    options: optionsArr,
+    correct_option: correctOption || null,
+    rating_scale: ratingScale || null,
   };
+}
+
+function parsePromptOptions_(rawJson) {
+  const s = String(rawJson || '').trim();
+  if (!s) return [];
+  try {
+    const arr = JSON.parse(s);
+    return Array.isArray(arr) ? arr.map(String) : [];
+  } catch (err) { return []; }
 }
 
 function getOrCreateSheet_(name, headers) {

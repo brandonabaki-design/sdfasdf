@@ -3,6 +3,84 @@
 let allResponses = [];
 let allPrompts = [];
 
+const TYPE_LABELS = {
+  open: 'Open response',
+  multiple_choice: 'Multiple choice',
+  acknowledgment: 'Acknowledgment',
+  rating: 'Rating',
+  poll: 'Poll',
+};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderResponseInput(card, p) {
+  const container = card.querySelector('.response-input');
+  const type = (p.type || 'open').toLowerCase();
+  if (type === 'open') {
+    container.innerHTML = `
+      <form class="response-form">
+        <label>Your response
+          <textarea rows="4" required placeholder="Type your response..."></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary">Submit response</button>
+        <p class="result muted small" aria-live="polite"></p>
+      </form>`;
+    container.querySelector('.response-form').addEventListener('submit', (e) => submitOpenResponse(e, p, card));
+    return;
+  }
+  if (type === 'multiple_choice' || type === 'poll') {
+    const opts = (p.options || []).map((label, i) => `
+      <label class="choice-row">
+        <input type="radio" name="choice-${p.id}" value="${i + 1}" />
+        <span class="choice-pill"><span class="choice-letter">${String.fromCharCode(65 + i)}</span> ${escapeHtml(label)}</span>
+      </label>`).join('');
+    container.innerHTML = `
+      <form class="response-form choice-form">
+        <fieldset class="choice-fieldset">
+          <legend>Pick one</legend>
+          ${opts}
+        </fieldset>
+        <button type="submit" class="btn btn-primary">Submit answer</button>
+        <p class="result muted small" aria-live="polite"></p>
+      </form>`;
+    container.querySelector('.response-form').addEventListener('submit', (e) => submitChoice(e, p, card));
+    return;
+  }
+  if (type === 'rating') {
+    const max = parseInt(p.rating_scale, 10) || 5;
+    const buttons = Array.from({ length: max }, (_, i) => i + 1).map(v => `
+      <label class="rating-row">
+        <input type="radio" name="rating-${p.id}" value="${v}" />
+        <span class="rating-pill">${v}</span>
+      </label>`).join('');
+    container.innerHTML = `
+      <form class="response-form rating-form">
+        <fieldset class="rating-fieldset">
+          <legend>Pick a value (1 — low, ${max} — high)</legend>
+          <div class="rating-row-wrap">${buttons}</div>
+        </fieldset>
+        <button type="submit" class="btn btn-primary">Submit rating</button>
+        <p class="result muted small" aria-live="polite"></p>
+      </form>`;
+    container.querySelector('.response-form').addEventListener('submit', (e) => submitRating(e, p, card));
+    return;
+  }
+  if (type === 'acknowledgment') {
+    container.innerHTML = `
+      <form class="response-form ack-form">
+        <p class="muted small">Click below to confirm you've read this message.</p>
+        <button type="submit" class="btn btn-primary">I acknowledge</button>
+        <p class="result muted small" aria-live="polite"></p>
+      </form>`;
+    container.querySelector('.response-form').addEventListener('submit', (e) => submitAck(e, p, card));
+    return;
+  }
+}
+
 function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
@@ -69,12 +147,16 @@ function renderPromptCard(p) {
   const created = new Date(p.created_at).toLocaleString();
   const closesAt = p.closes_at ? new Date(p.closes_at) : null;
   const closed = closesAt && !isNaN(closesAt.getTime()) && closesAt < new Date();
+  const type = (p.type || 'open').toLowerCase();
+  const typeLabel = TYPE_LABELS[type] || 'Open response';
 
   if (p.completed) card.classList.add('is-completed');
+  card.classList.add('prompt-type-' + type);
 
   card.innerHTML = `
     <header class="prompt-card-head">
       <div class="prompt-card-title">
+        <span class="type-badge type-${type}">${typeLabel}</span>
         <h3 class="font-heading"></h3>
         <p class="prompt-body"></p>
       </div>
@@ -92,15 +174,7 @@ function renderPromptCard(p) {
     </div>
 
     <div class="responses"></div>
-
-    <form class="response-form" ${closed ? 'hidden' : ''}>
-      <label>
-        Your response
-        <textarea rows="4" required placeholder="Type your response..."></textarea>
-      </label>
-      <button type="submit" class="btn btn-primary">Submit response</button>
-      <p class="result muted small" aria-live="polite"></p>
-    </form>
+    <div class="response-input"></div>
     ${closed ? '<p class="closed-banner">This assignment has closed. New submissions are no longer accepted.</p>' : ''}
   `;
   card.querySelector('h3').textContent = p.title || '(untitled)';
@@ -120,7 +194,7 @@ function renderPromptCard(p) {
 
   renderResponsesInCard(card, p.id);
   if (!closed) {
-    card.querySelector('.response-form').addEventListener('submit', (e) => submitResponse(e, p.id, card));
+    renderResponseInput(card, p);
   }
 
   // Mark-complete checkbox
@@ -196,31 +270,89 @@ function renderResponsesInCard(card, promptId) {
   }
 }
 
-async function submitResponse(event, promptId, card) {
+async function submitOpenResponse(event, p, card) {
   event.preventDefault();
   const form = event.target;
   const textarea = form.querySelector('textarea');
   const result = form.querySelector('.result');
   const button = form.querySelector('button[type="submit"]');
-
   const body = textarea.value.trim();
   if (!body) return;
-
   button.disabled = true;
   result.textContent = 'Submitting and getting AI feedback...';
-
   try {
-    const data = await api('submit_response', { prompt_id: promptId, body });
-    if (!data.ok) {
-      result.textContent = `Error: ${data.error || 'unknown'}`;
-      return;
-    }
+    const data = await api('submit_response', { prompt_id: p.id, body });
+    if (!data.ok) { result.textContent = `Error: ${data.error || 'unknown'}`; return; }
     allResponses.push(data.response);
     result.textContent = data.response.ai_feedback
       ? 'Submitted. AI feedback below.'
-      : 'Submitted. (AI feedback unavailable — check GEMINI_API_KEY.)';
+      : 'Submitted.';
     textarea.value = '';
-    renderResponsesInCard(card, promptId);
+    renderResponsesInCard(card, p.id);
+  } catch (err) {
+    result.textContent = `Network error: ${err.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function submitChoice(event, p, card) {
+  event.preventDefault();
+  const form = event.target;
+  const result = form.querySelector('.result');
+  const button = form.querySelector('button[type="submit"]');
+  const chosen = form.querySelector(`input[name="choice-${p.id}"]:checked`);
+  if (!chosen) { result.textContent = 'Pick an option.'; return; }
+  button.disabled = true;
+  result.textContent = 'Submitting...';
+  try {
+    const data = await api('submit_response', { prompt_id: p.id, option_index: parseInt(chosen.value, 10) });
+    if (!data.ok) { result.textContent = `Error: ${data.error || 'unknown'}`; return; }
+    allResponses.push(data.response);
+    result.textContent = 'Submitted.';
+    renderResponsesInCard(card, p.id);
+  } catch (err) {
+    result.textContent = `Network error: ${err.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function submitRating(event, p, card) {
+  event.preventDefault();
+  const form = event.target;
+  const result = form.querySelector('.result');
+  const button = form.querySelector('button[type="submit"]');
+  const chosen = form.querySelector(`input[name="rating-${p.id}"]:checked`);
+  if (!chosen) { result.textContent = 'Pick a value.'; return; }
+  button.disabled = true;
+  result.textContent = 'Submitting...';
+  try {
+    const data = await api('submit_response', { prompt_id: p.id, rating_value: parseInt(chosen.value, 10) });
+    if (!data.ok) { result.textContent = `Error: ${data.error || 'unknown'}`; return; }
+    allResponses.push(data.response);
+    result.textContent = 'Submitted.';
+    renderResponsesInCard(card, p.id);
+  } catch (err) {
+    result.textContent = `Network error: ${err.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function submitAck(event, p, card) {
+  event.preventDefault();
+  const form = event.target;
+  const result = form.querySelector('.result');
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  result.textContent = 'Acknowledging...';
+  try {
+    const data = await api('submit_response', { prompt_id: p.id });
+    if (!data.ok) { result.textContent = `Error: ${data.error || 'unknown'}`; return; }
+    allResponses.push(data.response);
+    result.textContent = 'Acknowledged.';
+    renderResponsesInCard(card, p.id);
   } catch (err) {
     result.textContent = `Network error: ${err.message}`;
   } finally {

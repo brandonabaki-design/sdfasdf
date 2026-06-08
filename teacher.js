@@ -3,6 +3,40 @@
 let currentDraftId = null;
 let currentSharePromptId = null;
 
+const TYPE_LABELS = {
+  open: 'Open response',
+  multiple_choice: 'Multiple choice',
+  acknowledgment: 'Acknowledgment',
+  rating: 'Rating',
+  poll: 'Poll',
+};
+
+function formatTypeBadge(type) {
+  return TYPE_LABELS[type] || 'Open response';
+}
+
+function renderPromptDetails(p) {
+  const type = (p.type || 'open').toLowerCase();
+  if (type === 'multiple_choice' || type === 'poll') {
+    const opts = (p.options || []).map((label, i) => {
+      const idx = i + 1;
+      const correct = type === 'multiple_choice' && parseInt(p.correct_option, 10) === idx;
+      return `<li${correct ? ' class="correct-option"' : ''}>${escapeHtml(label)}${correct ? ' <span class="correct-mark">correct</span>' : ''}</li>`;
+    }).join('');
+    return `<ol class="prompt-options-list">${opts}</ol>`;
+  }
+  if (type === 'rating') {
+    return `<p class="muted small">Scale: 1 to ${parseInt(p.rating_scale, 10) || 5}</p>`;
+  }
+  return '';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 async function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
@@ -205,11 +239,17 @@ function renderTeacherPromptCard(p) {
   const closesAt = p.closes_at ? new Date(p.closes_at) : null;
   const closed = closesAt && !isNaN(closesAt.getTime()) && closesAt < new Date();
   const audienceText = formatAudience(p.audience);
+  const type = (p.type || 'open').toLowerCase();
+  const typeBadge = formatTypeBadge(type);
 
   card.innerHTML = `
     <header class="prompt-header">
+      <div class="prompt-card-top">
+        <span class="type-badge type-${type}">${typeBadge}</span>
+      </div>
       <h3 class="font-heading"></h3>
       <p class="prompt-body"></p>
+      ${renderPromptDetails(p)}
       <div class="prompt-meta">
         <span class="meta-item"><span class="meta-label">From</span> <span class="prompt-teacher"></span></span>
         <span class="meta-item"><span class="meta-label">Published</span> <span class="prompt-time"></span></span>
@@ -283,9 +323,17 @@ function renderTeacherPromptCard(p) {
   // Class summary
   const summarizeBtn = card.querySelector('.summarize-btn');
   const summaryPanel = card.querySelector('.summary-panel');
-  summarizeBtn.addEventListener('click', () => generateSummary(p.id, summarizeBtn, summaryPanel));
+  summarizeBtn.textContent = summaryButtonLabel(type);
+  summarizeBtn.addEventListener('click', () => generateSummary(p, summarizeBtn, summaryPanel));
 
   return card;
+}
+
+function summaryButtonLabel(type) {
+  if (type === 'multiple_choice' || type === 'poll') return 'Show results';
+  if (type === 'rating') return 'Show rating breakdown';
+  if (type === 'acknowledgment') return 'Who acknowledged?';
+  return 'Generate AI summary';
 }
 
 /* ============================================================
@@ -495,26 +543,89 @@ function renderStudentThread(container, student, thread) {
    AI class summary
    ============================================================ */
 
-async function generateSummary(promptId, button, panel) {
+async function generateSummary(prompt, button, panel) {
+  const type = (prompt.type || 'open').toLowerCase();
   button.disabled = true;
   const originalText = button.textContent;
-  button.textContent = 'Generating...';
   panel.hidden = false;
-  panel.innerHTML = '<p class="muted small">Asking Gemini to summarise responses — this can take 10-30 seconds...</p>';
 
   try {
-    const data = await api('summarize_prompt_responses', { prompt_id: promptId });
-    if (!data.ok) {
-      panel.innerHTML = `<p class="muted small">Couldn't generate: ${data.error}</p>`;
-      return;
+    if (type === 'open') {
+      button.textContent = 'Generating...';
+      panel.innerHTML = '<p class="muted small">Asking Gemini to summarise responses — this can take 10-30 seconds...</p>';
+      const data = await api('summarize_prompt_responses', { prompt_id: prompt.id });
+      if (!data.ok) {
+        panel.innerHTML = `<p class="muted small">Couldn't generate: ${data.error}</p>`;
+      } else {
+        renderSummary(panel, data.summary);
+      }
+    } else {
+      button.textContent = 'Loading...';
+      panel.innerHTML = '<p class="muted small">Loading results...</p>';
+      const data = await api('get_prompt_summary', { prompt_id: prompt.id });
+      if (!data.ok) {
+        panel.innerHTML = `<p class="muted small">Couldn't load: ${data.error}</p>`;
+      } else {
+        renderStructuredSummary(panel, data.summary);
+      }
     }
-    renderSummary(panel, data.summary);
   } catch (err) {
     panel.innerHTML = `<p class="muted small">Network error: ${err.message}</p>`;
   } finally {
     button.disabled = false;
-    button.textContent = originalText === 'Generate AI summary' ? 'Regenerate AI summary' : originalText;
+    button.textContent = originalText.startsWith('Generate') ? 'Regenerate AI summary' : originalText;
   }
+}
+
+function renderStructuredSummary(container, s) {
+  const generated = new Date(s.generated_at).toLocaleString();
+  if (s.type === 'multiple_choice' || s.type === 'poll') {
+    const correctLine = (s.type === 'multiple_choice' && typeof s.correct_percent === 'number')
+      ? `<p class="summary-overview"><strong>${s.correct_percent}%</strong> of ${s.total} students picked the correct answer.</p>` : '';
+    const bars = (s.options || []).map(o => `
+      <li class="result-bar${o.is_correct ? ' correct' : ''}">
+        <div class="result-bar-row">
+          <span class="result-bar-label">${escapeHtml(o.label)}${o.is_correct ? ' <span class="correct-mark">correct</span>' : ''}</span>
+          <span class="result-bar-count">${o.count} · ${o.percent}%</span>
+        </div>
+        <div class="result-bar-track"><div class="result-bar-fill" style="width:${o.percent}%"></div></div>
+      </li>`).join('');
+    container.innerHTML = `
+      <div class="structured-summary">
+        <p class="summary-meta muted small">${s.total} response${s.total === 1 ? '' : 's'} · generated ${generated}</p>
+        ${correctLine}
+        <ul class="result-bars">${bars}</ul>
+      </div>`;
+    return;
+  }
+  if (s.type === 'rating') {
+    const bars = (s.distribution || []).map(d => `
+      <li class="result-bar">
+        <div class="result-bar-row">
+          <span class="result-bar-label">${d.value}</span>
+          <span class="result-bar-count">${d.count} · ${d.percent}%</span>
+        </div>
+        <div class="result-bar-track"><div class="result-bar-fill" style="width:${d.percent}%"></div></div>
+      </li>`).join('');
+    container.innerHTML = `
+      <div class="structured-summary">
+        <p class="summary-meta muted small">${s.total} response${s.total === 1 ? '' : 's'} · generated ${generated}</p>
+        <p class="summary-overview"><strong>Average:</strong> ${s.average} / ${s.rating_scale}</p>
+        <ul class="result-bars">${bars}</ul>
+      </div>`;
+    return;
+  }
+  if (s.type === 'acknowledgment') {
+    const list = (s.acknowledged_by || []).map(a => `
+      <li><strong>${escapeHtml(a.name || '(no name)')}</strong> <span class="muted small">${escapeHtml(a.email || '')}</span></li>`).join('');
+    container.innerHTML = `
+      <div class="structured-summary">
+        <p class="summary-meta muted small">${s.total} acknowledgement${s.total === 1 ? '' : 's'} · generated ${generated}</p>
+        <ul class="ack-list">${list || '<li class="muted">No one has acknowledged yet.</li>'}</ul>
+      </div>`;
+    return;
+  }
+  container.innerHTML = '<p class="muted small">No structured summary for this type.</p>';
 }
 
 function renderSummary(container, s) {
@@ -740,10 +851,15 @@ function renderDraftCard(d) {
 
 function beginDraftCustomisation(d) {
   currentDraftId = d.id;
+  document.getElementById('prompt-type').value = d.type || 'open';
   document.getElementById('prompt-title').value = d.title || '';
   document.getElementById('prompt-body').value = d.body || '';
   document.getElementById('prompt-audience').value = d.audience || '';
   document.getElementById('prompt-closes-at').value = isoToDatetimeLocal(d.closes_at);
+  document.getElementById('prompt-options').value = (d.options || []).join('\n');
+  document.getElementById('prompt-correct').value = d.correct_option || '';
+  document.getElementById('prompt-rating-scale').value = d.rating_scale || 5;
+  applyFormTypeUI(d.type || 'open');
 
   document.getElementById('form-title').textContent = 'Customise & publish draft';
   document.getElementById('form-subtitle').textContent = 'Edit anything and publish under your own account.';
@@ -760,6 +876,9 @@ function beginDraftCustomisation(d) {
 function cancelDraftCustomisation() {
   currentDraftId = null;
   document.getElementById('prompt-form').reset();
+  document.getElementById('prompt-type').value = 'open';
+  document.getElementById('prompt-rating-scale').value = 5;
+  applyFormTypeUI('open');
   document.getElementById('form-title').textContent = 'Create a prompt';
   document.getElementById('form-subtitle').textContent = 'Publish a question or activity. Students see it instantly.';
   document.getElementById('publish-btn').textContent = 'Publish prompt';
@@ -860,14 +979,49 @@ async function sendShare() {
    Prompt publish form (handles both new prompts and draft publish)
    ============================================================ */
 
+function parseOptionsTextarea() {
+  const raw = document.getElementById('prompt-options').value;
+  return raw.split('\n').map(s => s.trim()).filter(Boolean);
+}
+
+function applyFormTypeUI(type) {
+  type = type || 'open';
+  const optionsField = document.getElementById('options-field');
+  const correctField = document.getElementById('correct-field');
+  const ratingField = document.getElementById('rating-field');
+  const bodyLabel = document.getElementById('body-label');
+  const bodyEl = document.getElementById('prompt-body');
+
+  optionsField.hidden = !(type === 'multiple_choice' || type === 'poll');
+  correctField.hidden = type !== 'multiple_choice';
+  ratingField.hidden = type !== 'rating';
+
+  if (type === 'acknowledgment') {
+    bodyLabel.textContent = 'Message to acknowledge';
+    bodyEl.placeholder = 'e.g. Please review the new uniform policy.';
+  } else if (type === 'multiple_choice' || type === 'poll') {
+    bodyLabel.textContent = 'Question';
+    bodyEl.placeholder = 'e.g. Which process produces oxygen in plants?';
+  } else if (type === 'rating') {
+    bodyLabel.textContent = 'Question';
+    bodyEl.placeholder = 'e.g. How confident do you feel about today\'s lesson?';
+  } else {
+    bodyLabel.textContent = 'Prompt body';
+    bodyEl.placeholder = 'What would you like the students to work on?';
+  }
+}
+
 async function submitPrompt(event) {
   event.preventDefault();
   const titleEl = document.getElementById('prompt-title');
   const bodyEl = document.getElementById('prompt-body');
   const audienceEl = document.getElementById('prompt-audience');
   const closesAtEl = document.getElementById('prompt-closes-at');
+  const typeEl = document.getElementById('prompt-type');
   const result = document.getElementById('result');
   const submitBtn = document.getElementById('publish-btn');
+
+  const type = typeEl.value;
 
   submitBtn.disabled = true;
   result.textContent = 'Publishing...';
@@ -877,7 +1031,23 @@ async function submitPrompt(event) {
     body: bodyEl.value.trim(),
     audience: audienceEl.value.trim(),
     closes_at: datetimeLocalToIso(closesAtEl.value),
+    type,
   };
+  if (type === 'multiple_choice' || type === 'poll') {
+    payload.options = parseOptionsTextarea();
+    if (payload.options.length < 2) {
+      result.textContent = 'Add at least two options.';
+      submitBtn.disabled = false;
+      return;
+    }
+  }
+  if (type === 'multiple_choice') {
+    const c = parseInt(document.getElementById('prompt-correct').value, 10);
+    if (c >= 1 && c <= payload.options.length) payload.correct_option = c;
+  }
+  if (type === 'rating') {
+    payload.rating_scale = parseInt(document.getElementById('prompt-rating-scale').value, 10) || 5;
+  }
 
   try {
     let data;
@@ -905,6 +1075,8 @@ async function submitPrompt(event) {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('prompt-form').addEventListener('submit', submitPrompt);
   document.getElementById('cancel-draft').addEventListener('click', cancelDraftCustomisation);
+  document.getElementById('prompt-type').addEventListener('change', (e) => applyFormTypeUI(e.target.value));
+  applyFormTypeUI('open');
 
   document.getElementById('sign-out').addEventListener('click', signOut);
 

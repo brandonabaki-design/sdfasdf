@@ -135,15 +135,48 @@
             </div>
             <form id="prompt-form">
               <label>
+                Type
+                <select id="prompt-type">
+                  <option value="open">Open response (AI feedback)</option>
+                  <option value="multiple_choice">Multiple choice</option>
+                  <option value="rating">Rating / scale</option>
+                  <option value="poll">Anonymous poll</option>
+                  <option value="acknowledgment">Acknowledgment</option>
+                </select>
+              </label>
+              <label>
                 Title
                 <input id="prompt-title" type="text" maxlength="120" required
                        placeholder="e.g. Reflection on yesterday's lesson" />
               </label>
               <label>
-                Prompt body
+                <span id="body-label">Prompt body</span>
                 <textarea id="prompt-body" rows="6" required
                           placeholder="What would you like the students to work on?"></textarea>
               </label>
+
+              <div id="options-field" class="conditional-field" hidden>
+                <label>
+                  Options <span class="field-hint">one per line — minimum 2, maximum 8</span>
+                  <textarea id="prompt-options" rows="4"
+                            placeholder="Option A&#10;Option B&#10;Option C"></textarea>
+                </label>
+              </div>
+
+              <div id="correct-field" class="conditional-field" hidden>
+                <label>
+                  Correct answer <span class="field-hint">optional — option number (1, 2, 3...)</span>
+                  <input id="prompt-correct" type="number" min="1" max="8" />
+                </label>
+              </div>
+
+              <div id="rating-field" class="conditional-field" hidden>
+                <label>
+                  Scale maximum <span class="field-hint">1-N rating, default 5</span>
+                  <input id="prompt-rating-scale" type="number" min="2" max="10" value="5" />
+                </label>
+              </div>
+
               <label>
                 Audience <span class="field-hint">leave blank for all aisa.sch.ae students</span>
                 <textarea id="prompt-audience" rows="2"
