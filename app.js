@@ -631,29 +631,6 @@ function openCheckoutModal() {
   document.getElementById('checkout-modal-backdrop').hidden = false;
   modal.hidden = false;
   modalOpen(modal, hasValidActiveCheckout() ? '#checkin-btn' : 'input[name="dest"]');
-
-  const select = document.getElementById('checkout-teacher-select');
-  select.innerHTML = '';
-  if (teacherList.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'No teachers configured';
-    opt.disabled = true;
-    select.appendChild(opt);
-  } else {
-    for (const email of teacherList) {
-      const opt = document.createElement('option');
-      opt.value = email;
-      opt.textContent = email;
-      select.appendChild(opt);
-    }
-  }
-  document.getElementById('checkout-notes').value = '';
-  document.getElementById('checkout-modal-result').textContent = '';
-
-  document.getElementById('checkout-modal-backdrop').hidden = false;
-  document.getElementById('checkout-modal').hidden = false;
-  setTimeout(() => select.focus(), 50);
 }
 
 function closeCheckoutModal() {
