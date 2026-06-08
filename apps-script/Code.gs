@@ -171,6 +171,10 @@ function doPost(e) {
       case 'get_poll_results':
         return jsonOut_({ ok: true, results: getPollResults_(payload.prompt_id || '') });
 
+      case 'suggest_prompt':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, suggestion: suggestPrompt_(payload.topic || '', payload.type || 'open') });
+
       case 'list_my_responses':
         return jsonOut_({ ok: true, responses: listResponsesForStudent_(claims.sub) });
 
@@ -662,6 +666,90 @@ function getPollResults_(promptId) {
   if (String(prompt.type || '').toLowerCase() !== 'poll') return { type: 'poll', total: 0, options: [] };
   const summary = getStructuredSummary_(promptId);
   return { type: 'poll', total: summary.total, options: summary.options };
+}
+
+function suggestPrompt_(topic, type) {
+  topic = String(topic || '').trim();
+  if (!topic) throw new Error('topic required');
+  type = String(type || 'open').toLowerCase();
+  if (VALID_PROMPT_TYPES.indexOf(type) === -1) type = 'open';
+
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+  const model = props.getProperty('GEMINI_MODEL') || DEFAULT_GEMINI_MODEL;
+
+  const typeGuidance = {
+    open: 'An open-ended question that invites a 2-4 sentence written reflection or explanation.',
+    multiple_choice: 'A multiple-choice question with 4 plausible options. Set correct_option to the 1-based index of the right answer. Distractors should be reasonable but clearly wrong on reflection.',
+    poll: 'A neutral, opinion-style poll question with 3-5 options. Do NOT set correct_option.',
+    rating: 'A self-reflection or check-in question to be answered on a 1-5 scale (1 low, 5 high). Do NOT include options.',
+    acknowledgment: 'A short message students need to read and confirm. The body should be the announcement text itself.',
+  };
+
+  const systemPrompt =
+    'You are an experienced teacher helping a colleague draft a classroom activity. ' +
+    'Given a topic and an activity type, generate a complete, classroom-ready prompt as JSON.\n\n' +
+    'Type for this request: ' + type + '\n' +
+    'Guidance: ' + (typeGuidance[type] || typeGuidance.open) + '\n\n' +
+    'Return:\n' +
+    '- title: 3-7 word activity title (no quotes around it)\n' +
+    '- body: the question or message itself, written directly to the student\n' +
+    '- options: array of strings (only for multiple_choice and poll)\n' +
+    '- correct_option: 1-based index (only for multiple_choice)\n' +
+    'Keep language age-appropriate and culturally neutral (school is in the UAE).';
+
+  const schema = {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      body: { type: 'string' },
+      options: { type: 'array', items: { type: 'string' } },
+      correct_option: { type: 'integer' },
+    },
+    required: ['title', 'body'],
+  };
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(model) + ':generateContent?key=' +
+              encodeURIComponent(apiKey);
+  const requestBody = {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: 'user', parts: [{ text: 'Topic: ' + topic }] }],
+    generationConfig: {
+      temperature: 0.6,
+      maxOutputTokens: 800,
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+    },
+  };
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(requestBody),
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) {
+    throw new Error('Gemini API ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+  }
+  const data = JSON.parse(res.getContentText());
+  const candidate = data.candidates && data.candidates[0];
+  if (!candidate) throw new Error('No candidate in Gemini response');
+  const text =
+    (candidate.content && candidate.content.parts && candidate.content.parts[0] &&
+     candidate.content.parts[0].text) || '';
+  if (!text) throw new Error('Empty Gemini response');
+  let parsed;
+  try { parsed = JSON.parse(text); } catch (err) {
+    throw new Error('Could not parse suggestion: ' + text.slice(0, 200));
+  }
+  return {
+    type,
+    title: String(parsed.title || '').trim(),
+    body: String(parsed.body || '').trim(),
+    options: Array.isArray(parsed.options) ? parsed.options.map(s => String(s).trim()).filter(Boolean) : [],
+    correct_option: (typeof parsed.correct_option === 'number') ? parsed.correct_option : null,
+  };
 }
 
 function sendDistressAlert_(prompt, claims, responseBody, flagReason) {

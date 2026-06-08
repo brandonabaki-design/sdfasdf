@@ -37,6 +37,161 @@ function escapeHtml(s) {
   }[c]));
 }
 
+const PROMPT_TEMPLATES = [
+  {
+    id: 'exit-ticket', label: '🎫 Exit ticket', type: 'open',
+    title: 'Exit ticket',
+    body: "In 2–3 sentences:\n• One thing you learned today\n• One question you still have",
+  },
+  {
+    id: 'reflection', label: '💭 Reflection', type: 'open',
+    title: 'Lesson reflection',
+    body: "Take a few minutes to reflect on today's lesson. What did you find challenging? What surprised you? What do you want to learn more about?",
+  },
+  {
+    id: 'mood', label: '🌡️ Mood check-in', type: 'rating', rating_scale: 5,
+    title: 'How are you feeling today?',
+    body: "Pick a number that best reflects how you're feeling right now.\n1 = struggling   ·   5 = great",
+  },
+  {
+    id: 'confidence', label: '📈 Confidence', type: 'rating', rating_scale: 5,
+    title: 'How confident do you feel about today\'s lesson?',
+    body: 'Rate your confidence with the material we covered today.\n1 = totally lost   ·   5 = I could teach it',
+  },
+  {
+    id: 'poll', label: '🤔 Quick poll', type: 'poll',
+    title: 'Quick poll',
+    body: 'Which of these feels most true to you right now?',
+    options: ['Option 1', 'Option 2', 'Option 3'],
+  },
+  {
+    id: 'knowledge', label: '❓ Knowledge check', type: 'multiple_choice',
+    title: 'Knowledge check',
+    body: 'Choose the best answer.',
+    options: ['Option A', 'Option B', 'Option C', 'Option D'],
+    correct_option: 1,
+  },
+  {
+    id: 'acknowledgment', label: '✅ Announcement', type: 'acknowledgment',
+    title: 'Important announcement',
+    body: 'Please confirm you have read and understood the message below.\n\n[Replace this paragraph with your announcement.]',
+  },
+];
+
+function renderTemplatesRow() {
+  const row = document.getElementById('templates-row');
+  if (!row) return;
+  row.innerHTML = '';
+  for (const t of PROMPT_TEMPLATES) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'template-chip';
+    chip.textContent = t.label;
+    chip.title = `${TYPE_LABELS[t.type] || t.type} · click to fill the form`;
+    chip.addEventListener('click', () => applyTemplate(t));
+    row.appendChild(chip);
+  }
+}
+
+function applyTemplate(t) {
+  document.getElementById('prompt-type').value = t.type;
+  document.getElementById('prompt-title').value = t.title || '';
+  document.getElementById('prompt-body').value = t.body || '';
+  document.getElementById('prompt-options').value = (t.options || []).join('\n');
+  document.getElementById('prompt-correct').value = t.correct_option || '';
+  document.getElementById('prompt-rating-scale').value = t.rating_scale || 5;
+  applyFormTypeUI(t.type);
+  document.getElementById('prompt-title').focus();
+  document.getElementById('prompt-title').select();
+}
+
+/* ============================================================
+   AI suggest modal
+   ============================================================ */
+
+let currentSuggestion = null;
+
+function openSuggestModal() {
+  currentSuggestion = null;
+  document.getElementById('suggest-topic').value = '';
+  document.getElementById('suggest-type').value = document.getElementById('prompt-type').value || 'open';
+  document.getElementById('suggest-result').textContent = '';
+  document.getElementById('suggest-preview').hidden = true;
+  document.getElementById('suggest-use').hidden = true;
+  document.getElementById('suggest-generate').hidden = false;
+  document.getElementById('suggest-backdrop').hidden = false;
+  document.getElementById('suggest-modal').hidden = false;
+  setTimeout(() => document.getElementById('suggest-topic').focus(), 50);
+}
+
+function closeSuggestModal() {
+  document.getElementById('suggest-backdrop').hidden = true;
+  document.getElementById('suggest-modal').hidden = true;
+  currentSuggestion = null;
+}
+
+async function generateSuggestion() {
+  const topic = document.getElementById('suggest-topic').value.trim();
+  const type = document.getElementById('suggest-type').value;
+  const result = document.getElementById('suggest-result');
+  const generateBtn = document.getElementById('suggest-generate');
+  if (!topic) { result.textContent = 'Enter a topic.'; return; }
+  generateBtn.disabled = true;
+  result.textContent = 'Asking Gemini — this can take a few seconds...';
+  document.getElementById('suggest-preview').hidden = true;
+  document.getElementById('suggest-use').hidden = true;
+  try {
+    const data = await api('suggest_prompt', { topic, type });
+    if (!data.ok) {
+      result.textContent = `Error: ${data.error || 'unknown'}`;
+      return;
+    }
+    currentSuggestion = data.suggestion;
+    result.textContent = '';
+    renderSuggestionPreview(data.suggestion);
+    document.getElementById('suggest-use').hidden = false;
+  } catch (err) {
+    result.textContent = `Network error: ${err.message}`;
+  } finally {
+    generateBtn.disabled = false;
+  }
+}
+
+function renderSuggestionPreview(s) {
+  const preview = document.getElementById('suggest-preview');
+  preview.hidden = false;
+  preview.querySelector('.suggest-preview-title').textContent = s.title || '(untitled)';
+  preview.querySelector('.suggest-preview-body').textContent = s.body || '';
+  const opts = preview.querySelector('.suggest-preview-options');
+  opts.hidden = true;
+  opts.innerHTML = '';
+  if (s.options && s.options.length) {
+    opts.hidden = false;
+    for (let i = 0; i < s.options.length; i++) {
+      const li = document.createElement('li');
+      const correct = s.type === 'multiple_choice' && s.correct_option === i + 1;
+      li.innerHTML = correct
+        ? `<strong></strong> <span class="correct-mark">correct</span>`
+        : '<span></span>';
+      (li.querySelector('strong') || li.querySelector('span')).textContent = s.options[i];
+      opts.appendChild(li);
+    }
+  }
+}
+
+function applyCurrentSuggestion() {
+  if (!currentSuggestion) return;
+  const s = currentSuggestion;
+  document.getElementById('prompt-type').value = s.type;
+  document.getElementById('prompt-title').value = s.title || '';
+  document.getElementById('prompt-body').value = s.body || '';
+  document.getElementById('prompt-options').value = (s.options || []).join('\n');
+  document.getElementById('prompt-correct').value = s.correct_option || '';
+  applyFormTypeUI(s.type);
+  closeSuggestModal();
+  document.getElementById('prompt-title').focus();
+}
+
 async function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
@@ -1077,6 +1232,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cancel-draft').addEventListener('click', cancelDraftCustomisation);
   document.getElementById('prompt-type').addEventListener('change', (e) => applyFormTypeUI(e.target.value));
   applyFormTypeUI('open');
+  renderTemplatesRow();
+
+  document.getElementById('suggest-ai-btn').addEventListener('click', openSuggestModal);
+  document.getElementById('suggest-close').addEventListener('click', closeSuggestModal);
+  document.getElementById('suggest-cancel').addEventListener('click', closeSuggestModal);
+  document.getElementById('suggest-backdrop').addEventListener('click', closeSuggestModal);
+  document.getElementById('suggest-generate').addEventListener('click', generateSuggestion);
+  document.getElementById('suggest-use').addEventListener('click', applyCurrentSuggestion);
 
   document.getElementById('sign-out').addEventListener('click', signOut);
 
@@ -1101,6 +1264,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeFlaggedPanel();
       closeShareModal();
       closeCheckoutsPanel();
+      closeSuggestModal();
     }
   });
 });

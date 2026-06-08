@@ -133,6 +133,16 @@
               <span>Customising draft from <strong id="draft-from"></strong></span>
               <button type="button" class="link-btn" id="cancel-draft">Cancel</button>
             </div>
+
+            <div class="templates-section">
+              <p class="templates-label">Start from a template</p>
+              <div class="templates-row" id="templates-row"></div>
+              <button type="button" class="suggest-ai-btn" id="suggest-ai-btn">
+                <span aria-hidden="true">✨</span>
+                <span>Suggest with AI</span>
+              </button>
+            </div>
+
             <form id="prompt-form">
               <label>
                 Type
@@ -211,6 +221,48 @@
       </section>
     </section>
   </main>
+
+  <!-- AI-suggest prompt modal -->
+  <div id="suggest-backdrop" class="modal-backdrop" hidden></div>
+  <div id="suggest-modal" class="modal" hidden role="dialog" aria-labelledby="suggest-title">
+    <header class="modal-header">
+      <h2 id="suggest-title" class="font-heading">
+        <span class="panel-icon suggest-icon" aria-hidden="true">✨</span>
+        Suggest with AI
+      </h2>
+      <button class="modal-close" id="suggest-close" aria-label="Close">×</button>
+    </header>
+    <div class="modal-body">
+      <p class="muted small">Describe what you want to assess and the AI will draft a complete prompt you can edit.</p>
+      <label>
+        Topic or learning goal
+        <input id="suggest-topic" type="text" maxlength="200"
+               placeholder="e.g. photosynthesis in 7th grade biology" />
+      </label>
+      <label>
+        Activity type
+        <select id="suggest-type">
+          <option value="open">Open response</option>
+          <option value="multiple_choice">Multiple choice</option>
+          <option value="rating">Rating / scale</option>
+          <option value="poll">Anonymous poll</option>
+          <option value="acknowledgment">Acknowledgment</option>
+        </select>
+      </label>
+      <p id="suggest-result" class="status-line" aria-live="polite"></p>
+      <div class="suggest-preview" id="suggest-preview" hidden>
+        <p class="suggest-preview-label">AI draft</p>
+        <h4 class="suggest-preview-title font-heading"></h4>
+        <p class="suggest-preview-body"></p>
+        <ol class="suggest-preview-options" hidden></ol>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="suggest-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="suggest-generate" type="button">Generate</button>
+        <button class="btn btn-amber" id="suggest-use" type="button" hidden>Use this</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Share-with-teacher modal -->
   <div id="share-backdrop" class="modal-backdrop" hidden></div>

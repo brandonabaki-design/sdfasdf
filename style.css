@@ -13,11 +13,11 @@
   --border: rgba(255, 255, 255, 0.10);
   --border-bright: rgba(255, 255, 255, 0.22);
 
-  /* Text */
-  --text: #ffffff;
-  --text-secondary: rgba(226, 232, 240, 0.92);
-  --text-muted: rgba(191, 219, 254, 0.72);
-  --text-dim: rgba(148, 163, 184, 0.65);
+  /* Text — boosted for readability on dark navy */
+  --text: #f8fafc;
+  --text-secondary: rgba(241, 245, 249, 0.96);
+  --text-muted: rgba(203, 213, 225, 0.88);
+  --text-dim: rgba(148, 163, 184, 0.82);
 
   /* Brand accents (Learning Hub palette) */
   --blue: #3b82f6;
@@ -62,13 +62,26 @@ html, body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: -0.005em;
 }
+p { margin: 0 0 8px; }
+h1, h2, h3, h4 { letter-spacing: -0.02em; }
 
 .font-heading { font-family: var(--font-heading); }
 
 a { color: var(--amber-bright); text-decoration: none; }
 a:hover { color: var(--amber); }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--indigo-bright);
+  outline-offset: 2px;
+}
 
 .muted { color: var(--text-muted); }
 .small { font-size: 12px; }
@@ -1158,13 +1171,14 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 }
 .page-title {
   font-family: var(--font-heading);
-  font-size: 32px;
+  font-size: 34px;
   font-weight: 800;
-  letter-spacing: -0.025em;
-  margin: 0 0 6px;
+  letter-spacing: -0.028em;
+  margin: 0 0 8px;
   color: white;
+  line-height: 1.15;
 }
-.page-subtitle { color: var(--text-muted); margin: 0; font-size: 15px; }
+.page-subtitle { color: var(--text-muted); margin: 0; font-size: 15px; line-height: 1.5; }
 
 .status-line {
   color: var(--text-muted);
@@ -1308,6 +1322,99 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
   border-color: var(--indigo-bright);
   box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
 }
+
+/* ============================================================
+   Templates row + Suggest-with-AI
+   ============================================================ */
+
+.templates-section {
+  margin: 0 0 22px;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.02));
+  border: 1px solid rgba(99, 102, 241, 0.20);
+  border-radius: 14px;
+}
+.templates-label {
+  margin: 0 0 12px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+.templates-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.template-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.template-chip:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--indigo-bright);
+  transform: translateY(-1px);
+}
+
+.suggest-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.20), rgba(99, 102, 241, 0.18));
+  border: 1px solid rgba(168, 85, 247, 0.40);
+  border-radius: 999px;
+  color: white;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.suggest-ai-btn:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.32), rgba(99, 102, 241, 0.28));
+  border-color: var(--violet);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px -8px rgba(168, 85, 247, 0.4);
+}
+
+.suggest-icon {
+  background: linear-gradient(135deg, var(--violet), var(--indigo));
+  box-shadow: 0 6px 16px -6px rgba(168, 85, 247, 0.5);
+}
+.suggest-preview {
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.32);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 14px 0 0;
+}
+.suggest-preview-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #d8b4fe;
+  margin: 0 0 6px;
+}
+.suggest-preview-title { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: white; }
+.suggest-preview-body { margin: 0; line-height: 1.6; white-space: pre-wrap; color: var(--text-secondary); }
+.suggest-preview-options { margin: 10px 0 0; padding-left: 22px; color: var(--text-secondary); }
+.suggest-preview-options li { padding: 2px 0; }
+
+.modal-actions { flex-wrap: wrap; }
 
 /* ============================================================
    Prompt type badges + per-type inputs
@@ -1502,7 +1609,7 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(59, 130, 246, 0.08));
   border: 1px solid rgba(99, 102, 241, 0.28);
   border-radius: 18px;
-  padding: 24px;
+  padding: 26px 28px;
   transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
   animation: fade-up 0.4s ease backwards;
 }
@@ -1536,17 +1643,19 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
 
 .prompt-card h3 {
   font-family: var(--font-heading);
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: -0.01em;
-  margin: 0 0 8px;
+  letter-spacing: -0.015em;
+  margin: 0 0 10px;
   color: white;
+  line-height: 1.3;
 }
 .prompt-card .prompt-body {
   color: var(--text-secondary);
   white-space: pre-wrap;
-  margin: 0 0 12px;
-  line-height: 1.6;
+  margin: 0 0 14px;
+  line-height: 1.65;
+  font-size: 15px;
 }
 .prompt-card .prompt-teacher,
 .prompt-card .prompt-time { font-family: var(--font-mono); color: var(--text-dim); }
