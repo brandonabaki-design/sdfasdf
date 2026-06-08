@@ -684,7 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('assignments-close').addEventListener('click', closeAssignmentsPanel);
   document.getElementById('assignments-backdrop').addEventListener('click', closeAssignmentsPanel);
 
-  document.querySelectorAll('.checkout-option').forEach(btn => {
+  document.querySelectorAll('.checkout-chip').forEach(btn => {
     btn.addEventListener('click', () => openCheckoutModal(btn.dataset.destination));
   });
   document.getElementById('checkin-btn').addEventListener('click', submitCheckIn);

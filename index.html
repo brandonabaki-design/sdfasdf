@@ -126,35 +126,30 @@
       </header>
       <p id="result" class="status-line" aria-live="polite"></p>
 
-      <!-- Check out / check in card -->
-      <section id="checkout-card" class="checkout-card">
+      <!-- Check out / check in (compact strip) -->
+      <section id="checkout-card" class="checkout-strip">
         <div id="checkout-idle" class="checkout-idle">
-          <div class="checkout-header">
-            <h3 class="font-heading">Need to step out?</h3>
-            <p class="muted small">Tap a destination — we'll notify your teacher by email and time your trip.</p>
-          </div>
-          <div class="checkout-options">
-            <button class="checkout-option" data-destination="Bathroom" type="button">
-              <span class="checkout-emoji" aria-hidden="true">🚻</span>
-              <span class="checkout-label">Bathroom</span>
+          <span class="checkout-strip-icon" aria-hidden="true">🚪</span>
+          <span class="checkout-strip-label">Need to step out?</span>
+          <div class="checkout-strip-options">
+            <button class="checkout-chip" data-destination="Bathroom" type="button">
+              <span aria-hidden="true">🚻</span> Bathroom
             </button>
-            <button class="checkout-option" data-destination="Nurse" type="button">
-              <span class="checkout-emoji" aria-hidden="true">⚕️</span>
-              <span class="checkout-label">Nurse</span>
+            <button class="checkout-chip" data-destination="Nurse" type="button">
+              <span aria-hidden="true">⚕️</span> Nurse
             </button>
-            <button class="checkout-option" data-destination="Counsellor" type="button">
-              <span class="checkout-emoji" aria-hidden="true">💬</span>
-              <span class="checkout-label">Counsellor</span>
+            <button class="checkout-chip" data-destination="Counsellor" type="button">
+              <span aria-hidden="true">💬</span> Counsellor
             </button>
           </div>
         </div>
-        <div id="checkout-active" class="checkout-active" hidden>
-          <div class="checkout-active-info">
-            <p class="checkout-active-label small">Currently checked out</p>
-            <h3 class="font-heading">At <span id="checkout-destination-active"></span></h3>
-            <p class="muted small">Notified <span id="checkout-teacher-active"></span> · <span id="checkout-since"></span></p>
-          </div>
-          <button id="checkin-btn" class="btn btn-amber" type="button">Check back in</button>
+        <div id="checkout-active" class="checkout-strip-active" hidden>
+          <span class="checkout-strip-icon" aria-hidden="true">🚪</span>
+          <span class="checkout-strip-active-text">
+            You're out at <strong id="checkout-destination-active"></strong>
+            <span class="muted"> · <span id="checkout-since"></span> · notified <span id="checkout-teacher-active"></span></span>
+          </span>
+          <button id="checkin-btn" class="btn btn-amber checkin-compact" type="button">Check back in</button>
         </div>
       </section>
 
