@@ -74,7 +74,7 @@ async function loadDashboard() {
       api('get_checkout_leaderboard'),
     ]);
     if (!dash.ok) {
-      loading.textContent = `Couldn't load: ${dash.error}`;
+      loading.textContent = `Couldn't load: ${friendlyError(dash.error)}`;
       return;
     }
     loading.hidden = true;

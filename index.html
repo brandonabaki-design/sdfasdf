@@ -2,21 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>AISA Student Hub</title>
+  <meta name="description" content="Sign in with your aisa.sch.ae account to read teacher prompts, submit responses, and get instant AI feedback." />
+  <meta name="theme-color" content="#0b1533" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="AISA Hub" />
+  <meta name="color-scheme" content="dark light" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="AISA Student Hub" />
+  <meta property="og:description" content="Teacher prompts, student responses, instant AI feedback." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="favicon.svg" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <noscript>
+    <div class="noscript-banner">
+      <strong>JavaScript is required.</strong><br />
+      The AISA Student Hub needs JavaScript to sign you in with Google and load your prompts.
+      Please enable JavaScript in your browser, or ask your school IT team if this site is blocked.
+    </div>
+  </noscript>
   <div class="bg-blobs" aria-hidden="true">
     <div class="bg-blob b1"></div>
     <div class="bg-blob b2"></div>
     <div class="bg-blob b3"></div>
   </div>
 
-  <nav class="topbar">
+  <nav class="topbar" aria-label="Primary">
     <a href="index.html" class="brand">
       <span class="brand-mark" aria-hidden="true">🦁</span>
       <span class="brand-text">
@@ -58,7 +78,7 @@
     <div class="assignments-list" id="assignments-list"></div>
   </aside>
 
-  <main class="container">
+  <main class="container" id="main">
     <section id="signin-container" class="hero">
       <div class="hero-content">
         <h1 class="hero-title font-heading">

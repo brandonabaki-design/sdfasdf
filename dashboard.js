@@ -50,7 +50,7 @@ async function loadDashboard() {
     }
     const data = await api('get_teacher_dashboard');
     if (!data.ok) {
-      roleLoading.textContent = `Couldn't load: ${data.error}`;
+      roleLoading.textContent = `Couldn't load: ${friendlyError(data.error)}`;
       return;
     }
     roleLoading.hidden = true;
@@ -121,7 +121,7 @@ async function downloadCsv(kind, label, button) {
   button.querySelector('.download-cta').textContent = 'Preparing...';
   try {
     const data = await api('export_csv', { kind });
-    if (!data.ok) { alert('Error: ' + (data.error || 'unknown')); return; }
+    if (!data.ok) { alert(friendlyError(data.error)); return; }
     const blob = new Blob([data.csv || ''], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

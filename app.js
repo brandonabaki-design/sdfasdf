@@ -282,11 +282,12 @@ async function submitOpenResponse(event, p, card) {
   result.textContent = 'Submitting and getting AI feedback...';
   try {
     const data = await api('submit_response', { prompt_id: p.id, body });
-    if (!data.ok) { result.textContent = `Error: ${data.error || 'unknown'}`; return; }
+    if (!data.ok) { result.textContent = `Error: ${friendlyError(data.error)}`; return; }
     allResponses.push(data.response);
     result.textContent = data.response.ai_feedback
       ? 'Submitted. AI feedback below.'
       : 'Submitted.';
+    announce(data.response.ai_feedback ? 'Response submitted, AI feedback ready.' : 'Response submitted.');
     textarea.value = '';
     renderResponsesInCard(card, p.id);
   } catch (err) {
@@ -307,7 +308,7 @@ async function submitChoice(event, p, card) {
   result.textContent = 'Submitting...';
   try {
     const data = await api('submit_response', { prompt_id: p.id, option_index: parseInt(chosen.value, 10) });
-    if (!data.ok) { result.textContent = `Error: ${data.error || 'unknown'}`; return; }
+    if (!data.ok) { result.textContent = `Error: ${friendlyError(data.error)}`; return; }
     allResponses.push(data.response);
     result.textContent = 'Submitted.';
     renderResponsesInCard(card, p.id);
@@ -329,7 +330,7 @@ async function submitRating(event, p, card) {
   result.textContent = 'Submitting...';
   try {
     const data = await api('submit_response', { prompt_id: p.id, rating_value: parseInt(chosen.value, 10) });
-    if (!data.ok) { result.textContent = `Error: ${data.error || 'unknown'}`; return; }
+    if (!data.ok) { result.textContent = `Error: ${friendlyError(data.error)}`; return; }
     allResponses.push(data.response);
     result.textContent = 'Submitted.';
     renderResponsesInCard(card, p.id);
@@ -349,7 +350,7 @@ async function submitAck(event, p, card) {
   result.textContent = 'Acknowledging...';
   try {
     const data = await api('submit_response', { prompt_id: p.id });
-    if (!data.ok) { result.textContent = `Error: ${data.error || 'unknown'}`; return; }
+    if (!data.ok) { result.textContent = `Error: ${friendlyError(data.error)}`; return; }
     allResponses.push(data.response);
     result.textContent = 'Acknowledged.';
     renderResponsesInCard(card, p.id);
@@ -370,7 +371,7 @@ async function logImHere() {
     if (data.ok) {
       result.textContent = `Logged at ${new Date(data.timestamp).toLocaleTimeString()}.`;
     } else {
-      result.textContent = `Error: ${data.error || 'unknown'}`;
+      result.textContent = `Error: ${friendlyError(data.error)}`;
     }
   } catch (err) {
     result.textContent = `Network error: ${err.message}`;
@@ -501,10 +502,11 @@ function renderAssignmentRow(p) {
 }
 
 function openAssignmentsPanel() {
-  document.getElementById('assignments-backdrop').classList.add('open');
   const panel = document.getElementById('assignments-panel');
+  document.getElementById('assignments-backdrop').classList.add('open');
   panel.classList.add('open');
   panel.setAttribute('aria-hidden', 'false');
+  modalOpen(panel, '#assignments-close');
   renderAssignmentsList();
 }
 
@@ -516,6 +518,7 @@ function closeAssignmentsPanel() {
     panel.classList.remove('open');
     panel.setAttribute('aria-hidden', 'true');
   }
+  modalClose();
 }
 
 /* ============================================================
@@ -581,8 +584,10 @@ function updateSinceTimer() {
 function openCheckoutModal(destination) {
   if (activeCheckout) return;
   checkoutPendingDestination = destination;
+  const modal = document.getElementById('checkout-modal');
   document.getElementById('checkout-modal-heading').textContent = `Check out — ${destination}`;
   document.getElementById('checkout-modal-destination').textContent = destination;
+  modalOpen(modal, '#checkout-teacher-select');
 
   const select = document.getElementById('checkout-teacher-select');
   select.innerHTML = '';
@@ -612,6 +617,7 @@ function closeCheckoutModal() {
   checkoutPendingDestination = null;
   document.getElementById('checkout-modal-backdrop').hidden = true;
   document.getElementById('checkout-modal').hidden = true;
+  modalClose();
 }
 
 async function submitCheckout() {
@@ -637,8 +643,9 @@ async function submitCheckout() {
       activeCheckout = data.checkout;
       renderCheckoutState();
       closeCheckoutModal();
+      announce("You're checked out. Your teacher has been notified.");
     } else {
-      result.textContent = `Error: ${data.error || 'unknown'}`;
+      result.textContent = `Error: ${friendlyError(data.error)}`;
     }
   } catch (err) {
     result.textContent = `Network error: ${err.message}`;
@@ -658,8 +665,9 @@ async function submitCheckIn() {
     if (data.ok) {
       activeCheckout = null;
       renderCheckoutState();
+      announce('Welcome back. Your check-in has been logged.');
     } else {
-      alert('Error: ' + (data.error || 'unknown'));
+      alert('Error: ' + (friendlyError(data.error)));
     }
   } catch (err) {
     alert('Network error: ' + err.message);

@@ -53,6 +53,172 @@
 
 * { box-sizing: border-box; }
 
+/* Skip link — invisible until focused, lets keyboard users jump past the navbar. */
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -100px;
+  z-index: 100;
+  padding: 12px 18px;
+  background: var(--amber);
+  color: #1a1a1a;
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: 10px;
+  transition: top 0.18s ease;
+}
+.skip-link:focus { top: 8px; outline: 3px solid white; outline-offset: 2px; }
+
+.noscript-banner {
+  display: block;
+  margin: 40px auto;
+  max-width: 600px;
+  padding: 20px 24px;
+  background: rgba(244, 63, 94, 0.16);
+  border: 1px solid rgba(244, 63, 94, 0.42);
+  border-radius: 14px;
+  color: #fecdd3;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* Screen-reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Honour user motion preferences — turns off entrance and ambient animations
+   for users who set "Reduce Motion" in their OS. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .bg-blob { animation: none !important; }
+}
+
+/* Consistent visible focus indicator for everyone using a keyboard. */
+:focus-visible {
+  outline: 3px solid var(--amber-bright) !important;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible,
+a:focus-visible {
+  outline-offset: 3px;
+}
+
+/* Loading skeletons — replace the bare "Loading..." text with a shimmering
+   placeholder so the page feels alive while data is fetched. */
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.05) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 12px;
+  display: block;
+}
+.skeleton-stack { display: flex; flex-direction: column; gap: 12px; }
+.skeleton-line { height: 18px; }
+.skeleton-line.short { width: 40%; }
+.skeleton-line.medium { width: 70%; }
+.skeleton-line.long { width: 100%; }
+.skeleton-card {
+  height: 120px;
+  border: 1px solid var(--border);
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 16px;
+}
+.skeleton-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .skeleton-card { animation: none !important; opacity: 0.6; }
+}
+
+/* Empty states — friendly cards instead of plain text */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border-bright);
+  border-radius: 18px;
+}
+.empty-state .empty-icon { font-size: 56px; display: block; margin-bottom: 14px; opacity: 0.9; }
+.empty-state h3 { font-family: var(--font-heading); font-size: 20px; margin: 0 0 8px; color: white; }
+.empty-state p { margin: 0; color: var(--text-muted); font-size: 16px; }
+
+/* Inline alerts (errors, warnings, info) */
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  margin: 12px 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.alert .alert-icon { font-size: 20px; line-height: 1; }
+.alert.alert-error {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.40);
+  color: #fda4af;
+}
+.alert.alert-info {
+  background: rgba(99, 102, 241, 0.10);
+  border-color: rgba(99, 102, 241, 0.30);
+  color: var(--text);
+}
+
+/* Print styles — clean monochrome export when teachers print a dashboard */
+@media print {
+  body { background: white !important; color: black !important; }
+  .bg-blobs, .topbar, .page-footer, .skip-link,
+  #flagged-btn, #checkouts-btn, #assignments-btn,
+  .flagged-panel, .assignments-panel, .checkouts-panel,
+  .download-row, button.refresh-btn, #refresh-btn { display: none !important; }
+  .panel, .stat-card { box-shadow: none !important; border: 1px solid #ccc !important; background: white !important; color: black !important; break-inside: avoid; }
+  .stat-card .stat-value, .stat-card .stat-value-big,
+  .gradient-amber, .hero-level-emoji,
+  .stat-card.stat-vivid.stat-indigo .stat-value-big,
+  .stat-card.stat-vivid.stat-amber .stat-value-big,
+  .stat-card.stat-vivid.stat-cyan .stat-value-big,
+  .stat-card.stat-vivid.stat-rose .stat-value-big,
+  .stat-card.stat-vivid.stat-violet .stat-value-big {
+    background: none !important;
+    -webkit-text-fill-color: black !important;
+    color: black !important;
+  }
+  a { color: black !important; text-decoration: underline; }
+}
+
 html, body {
   margin: 0;
   padding: 0;

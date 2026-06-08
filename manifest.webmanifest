@@ -1,0 +1,21 @@
+{
+  "name": "AISA Student Hub",
+  "short_name": "AISA Hub",
+  "description": "A unified workspace where teachers design, students respond, and AI provides instant feedback. Built for the American International School of Abu Dhabi.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1533",
+  "theme_color": "#0b1533",
+  "lang": "en",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

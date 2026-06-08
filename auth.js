@@ -165,6 +165,78 @@ function handleAuthFailure() {
   document.dispatchEvent(new CustomEvent('aisa:signed-out'));
 }
 
+// Friendly-up backend error strings. Don't show raw "not a teacher" /
+// "invalid idToken" etc — translate into something a student or teacher
+// can act on.
+function friendlyError(raw) {
+  const e = String(raw || '').toLowerCase();
+  if (!e) return 'Something went wrong. Try again in a moment.';
+  if (e.includes('not a teacher')) return "You don't have teacher access on this account.";
+  if (e.includes('invalid idtoken') || e.includes('missing idtoken') || e.includes('not signed in')) {
+    return 'Your session has ended — please sign in again.';
+  }
+  if (e.includes('wrong domain')) return 'Only aisa.sch.ae accounts can use this site.';
+  if (e.includes('prompt not found')) return "That prompt couldn't be found.";
+  if (e.includes('not your prompt') || e.includes('not your draft')) {
+    return "You can only edit prompts and drafts that belong to you.";
+  }
+  if (e.includes('this prompt has closed')) return 'The deadline for this prompt has passed.';
+  if (e.includes('prompt is not active')) return "This prompt isn't accepting responses right now.";
+  if (e.includes('response is empty')) return 'Please write a response before submitting.';
+  if (e.includes('invalid option')) return 'Please pick one of the options.';
+  if (e.includes('invalid rating')) return 'Please pick a rating value.';
+  if (e.includes('at least 2 options')) return 'Add at least two options.';
+  if (e.includes('at most 8 options')) return 'A prompt can have at most 8 options.';
+  if (e.includes('recipient_email required')) return "Enter the teacher's email address.";
+  if (e.includes('recipient must be')) return 'The recipient must be an aisa.sch.ae teacher.';
+  if (e.includes('recipient is not')) return 'That teacher is not on the allow-list.';
+  if (e.includes('already checked out')) return "You're already checked out. Please check back in first.";
+  if (e.includes('teacher_email required')) return "Pick a teacher to notify.";
+  if (e.includes('destination required')) return 'Pick where you are going.';
+  if (e.includes('gemini')) return "Our AI helper couldn't reply just now. Your work was saved.";
+  if (e.includes('network')) return "We couldn't reach the server. Check your internet and try again.";
+  if (e.includes('topic required')) return 'Enter a topic for the AI to draft.';
+  // Fallback — keep it short and human.
+  return 'Something went wrong. Please try again.';
+}
+
+// Live region announcer for transient status changes (saved, submitted, etc).
+// Creates a single hidden element shared across the page.
+function announce(message) {
+  let region = document.getElementById('aria-live-announcer');
+  if (!region) {
+    region = document.createElement('div');
+    region.id = 'aria-live-announcer';
+    region.setAttribute('role', 'status');
+    region.setAttribute('aria-live', 'polite');
+    region.className = 'sr-only';
+    document.body.appendChild(region);
+  }
+  region.textContent = '';
+  // Defer so screen readers register the change.
+  setTimeout(() => { region.textContent = message; }, 50);
+}
+
+// Focus management for modal/panel dialogs. Saves the element that opened the
+// modal, focuses the first interactive element inside, and on close restores
+// focus to the opener.
+let _lastModalOpener = null;
+function modalOpen(panelEl, firstFocusableSelector) {
+  _lastModalOpener = document.activeElement;
+  if (firstFocusableSelector) {
+    setTimeout(() => {
+      const target = panelEl.querySelector(firstFocusableSelector);
+      if (target) target.focus();
+    }, 60);
+  }
+}
+function modalClose() {
+  if (_lastModalOpener && typeof _lastModalOpener.focus === 'function') {
+    try { _lastModalOpener.focus(); } catch (_) {}
+  }
+  _lastModalOpener = null;
+}
+
 // Natural-language timestamp for student-friendly display. Returns short
 // strings like "Just now", "12 min ago", "Today at 2:15 PM", "Yesterday at
 // 9:30 AM", "Tuesday at 11 AM", "Mar 14".

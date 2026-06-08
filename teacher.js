@@ -114,6 +114,7 @@ let currentSuggestion = null;
 
 function openSuggestModal() {
   currentSuggestion = null;
+  const modal = document.getElementById('suggest-modal');
   document.getElementById('suggest-topic').value = '';
   document.getElementById('suggest-type').value = document.getElementById('prompt-type').value || 'open';
   document.getElementById('suggest-result').textContent = '';
@@ -121,14 +122,15 @@ function openSuggestModal() {
   document.getElementById('suggest-use').hidden = true;
   document.getElementById('suggest-generate').hidden = false;
   document.getElementById('suggest-backdrop').hidden = false;
-  document.getElementById('suggest-modal').hidden = false;
-  setTimeout(() => document.getElementById('suggest-topic').focus(), 50);
+  modal.hidden = false;
+  modalOpen(modal, '#suggest-topic');
 }
 
 function closeSuggestModal() {
   document.getElementById('suggest-backdrop').hidden = true;
   document.getElementById('suggest-modal').hidden = true;
   currentSuggestion = null;
+  modalClose();
 }
 
 async function generateSuggestion() {
@@ -144,7 +146,7 @@ async function generateSuggestion() {
   try {
     const data = await api('suggest_prompt', { topic, type });
     if (!data.ok) {
-      result.textContent = `Error: ${data.error || 'unknown'}`;
+      result.textContent = `Error: ${friendlyError(data.error)}`;
       return;
     }
     currentSuggestion = data.suggestion;
@@ -347,10 +349,11 @@ function renderCheckoutItem(c) {
 }
 
 function openCheckoutsPanel() {
-  document.getElementById('checkouts-backdrop').classList.add('open');
   const panel = document.getElementById('checkouts-panel');
+  document.getElementById('checkouts-backdrop').classList.add('open');
   panel.classList.add('open');
   panel.setAttribute('aria-hidden', 'false');
+  modalOpen(panel, '#checkouts-close');
   refreshCheckouts();
 }
 
@@ -362,6 +365,7 @@ function closeCheckoutsPanel() {
     panel.classList.remove('open');
     panel.setAttribute('aria-hidden', 'true');
   }
+  modalClose();
 }
 
 async function loadPrompts() {
@@ -370,7 +374,7 @@ async function loadPrompts() {
   try {
     const data = await api('list_prompts');
     if (!data.ok) {
-      list.textContent = `Couldn't load prompts: ${data.error}`;
+      list.textContent = `Couldn't load prompts: ${friendlyError(data.error)}`;
       return;
     }
     if (data.prompts.length === 0) {
@@ -506,7 +510,7 @@ async function loadResponsesForPrompt(card, promptId) {
   try {
     const data = await api('list_responses_for_prompt', { prompt_id: promptId });
     if (!data.ok) {
-      status.textContent = `Couldn't load: ${data.error}`;
+      status.textContent = `Couldn't load: ${friendlyError(data.error)}`;
       return;
     }
     if (data.responses.length === 0) {
@@ -574,7 +578,7 @@ async function loadStudentsForPrompt(card, promptId) {
   try {
     const data = await api('list_students_for_prompt', { prompt_id: promptId });
     if (!data.ok) {
-      status.textContent = `Couldn't load: ${data.error}`;
+      status.textContent = `Couldn't load: ${friendlyError(data.error)}`;
       return;
     }
     if (data.students.length === 0) {
@@ -934,7 +938,7 @@ function renderFlaggedItem(r) {
       } else {
         resolveBtn.disabled = false;
         resolveBtn.textContent = 'Mark resolved';
-        alert('Error: ' + (data.error || 'unknown'));
+        alert('Error: ' + (friendlyError(data.error)));
       }
     } catch (err) {
       resolveBtn.disabled = false;
@@ -946,10 +950,11 @@ function renderFlaggedItem(r) {
 }
 
 function openFlaggedPanel() {
-  document.getElementById('flagged-backdrop').classList.add('open');
   const panel = document.getElementById('flagged-panel');
+  document.getElementById('flagged-backdrop').classList.add('open');
   panel.classList.add('open');
   panel.setAttribute('aria-hidden', 'false');
+  modalOpen(panel, '#flagged-close');
   refreshFlaggedCount();
 }
 
@@ -958,6 +963,7 @@ function closeFlaggedPanel() {
   const panel = document.getElementById('flagged-panel');
   panel.classList.remove('open');
   panel.setAttribute('aria-hidden', 'true');
+  modalClose();
 }
 
 /* ============================================================
@@ -1091,7 +1097,7 @@ async function discardDraft(draftId) {
       if (currentDraftId === draftId) cancelDraftCustomisation();
       loadDrafts();
     } else {
-      alert('Error: ' + (data.error || 'unknown'));
+      alert('Error: ' + (friendlyError(data.error)));
     }
   } catch (err) {
     alert('Network error: ' + err.message);
@@ -1129,18 +1135,20 @@ function formatAudience(audience) {
 
 function openShareModal(prompt) {
   currentSharePromptId = prompt.id;
+  const modal = document.getElementById('share-modal');
   document.getElementById('share-prompt-title').textContent = prompt.title || '(untitled)';
   document.getElementById('share-recipient').value = '';
   document.getElementById('share-result').textContent = '';
   document.getElementById('share-backdrop').hidden = false;
-  document.getElementById('share-modal').hidden = false;
-  setTimeout(() => document.getElementById('share-recipient').focus(), 50);
+  modal.hidden = false;
+  modalOpen(modal, '#share-recipient');
 }
 
 function closeShareModal() {
   currentSharePromptId = null;
   document.getElementById('share-backdrop').hidden = true;
   document.getElementById('share-modal').hidden = true;
+  modalClose();
 }
 
 async function sendShare() {
@@ -1161,9 +1169,10 @@ async function sendShare() {
     });
     if (data.ok) {
       result.textContent = `Sent to ${data.recipient}. They'll see it under "Shared with you" on their dashboard.`;
+      announce(`Draft sent to ${data.recipient}.`);
       setTimeout(closeShareModal, 1500);
     } else {
-      result.textContent = `Error: ${data.error || 'unknown'}`;
+      result.textContent = `Error: ${friendlyError(data.error)}`;
     }
   } catch (err) {
     result.textContent = `Network error: ${err.message}`;
@@ -1256,7 +1265,9 @@ async function submitPrompt(event) {
       data = await api('create_prompt', payload);
     }
     if (data.ok) {
-      result.textContent = currentEditPromptId ? 'Saved.' : (currentDraftId ? 'Draft published.' : 'Published.');
+      const msg = currentEditPromptId ? 'Saved.' : (currentDraftId ? 'Draft published.' : 'Published.');
+      result.textContent = msg;
+      announce(msg);
       const wasDraft = !!currentDraftId;
       const wasEdit = !!currentEditPromptId;
       if (wasEdit) cancelEditPrompt();
@@ -1264,7 +1275,7 @@ async function submitPrompt(event) {
       loadPrompts();
       if (wasDraft) loadDrafts();
     } else {
-      result.textContent = `Error: ${data.error || 'unknown'}`;
+      result.textContent = `Error: ${friendlyError(data.error)}`;
     }
   } catch (err) {
     result.textContent = `Network error: ${err.message}`;

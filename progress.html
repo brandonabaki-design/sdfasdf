@@ -2,21 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>AISA Hub · My Progress</title>
+  <meta name="description" content="Track your activity, streaks, badges, and the AI feedback you've earned." />
+  <meta name="theme-color" content="#0b1533" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="AISA Hub" />
+  <meta name="color-scheme" content="dark light" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="favicon.svg" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <noscript>
+    <div class="noscript-banner">
+      <strong>JavaScript is required.</strong><br />
+      My Progress needs JavaScript to load your data.
+    </div>
+  </noscript>
   <div class="bg-blobs" aria-hidden="true">
     <div class="bg-blob b1"></div>
     <div class="bg-blob b2"></div>
     <div class="bg-blob b3"></div>
   </div>
 
-  <nav class="topbar">
+  <nav class="topbar" aria-label="Primary">
     <a href="index.html" class="brand">
       <span class="brand-mark" aria-hidden="true">🦁</span>
       <span class="brand-text">
@@ -37,7 +53,7 @@
     </div>
   </nav>
 
-  <main class="container container-wide">
+  <main class="container container-wide" id="main">
     <section id="signin-container" class="hero">
       <div class="hero-content">
         <h1 class="hero-title font-heading">
@@ -64,7 +80,19 @@
         <button type="button" class="btn btn-ghost" id="refresh-btn">Refresh</button>
       </header>
 
-      <section id="loading" class="role-loading">Loading...</section>
+      <section id="loading" class="role-loading" aria-live="polite" aria-busy="true">
+        <div class="skeleton-stack" aria-hidden="true">
+          <div class="skeleton skeleton-line medium"></div>
+          <div class="skeleton skeleton-line short"></div>
+        </div>
+        <div class="skeleton-grid" aria-hidden="true" style="margin-top: 20px;">
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+        </div>
+        <span class="sr-only">Loading your progress…</span>
+      </section>
 
       <section id="dashboard-content" hidden>
         <!-- Level hero with XP bar -->
