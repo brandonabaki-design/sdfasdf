@@ -134,6 +134,10 @@ function doPost(e) {
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_(discardDraft_(claims.email, payload.draft_id || ''));
 
+      case 'update_prompt':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_(updatePrompt_(claims, payload));
+
       case 'list_responses_for_prompt':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, responses: listResponsesForPrompt_(payload.prompt_id || '') });
@@ -459,6 +463,77 @@ function publishDraft_(claims, payload) {
         },
       };
     }
+  }
+  return { ok: false, error: 'not found' };
+}
+
+function updatePrompt_(claims, payload) {
+  const promptId = payload.prompt_id;
+  if (!promptId) return { ok: false, error: 'prompt_id required' };
+  const sheet = getOrCreateSheet_(PROMPTS_SHEET, PROMPTS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: false, error: 'no prompts' };
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0] !== promptId) continue;
+    const rowIndex = i + 2;
+    const rowVals = sheet.getRange(rowIndex, 1, 1, PROMPTS_HEADERS.length).getValues()[0];
+    if (String(rowVals[2]).toLowerCase() !== String(claims.email).toLowerCase()) {
+      return { ok: false, error: 'you can only edit your own prompts' };
+    }
+
+    const type = String(rowVals[9] || 'open').toLowerCase();
+    const title = (payload.title !== undefined) ? String(payload.title) : rowVals[3];
+    const body  = (payload.body !== undefined)  ? String(payload.body)  : rowVals[4];
+    const closesAt = (payload.closes_at !== undefined) ? payload.closes_at : (rowVals[6] || '');
+    const audience = (payload.audience !== undefined) ? payload.audience : (rowVals[7] || '');
+
+    let optionsJson = rowVals[10] || '';
+    let correctOption = rowVals[11] || '';
+    let ratingScale = rowVals[12] || '';
+
+    if ((type === 'multiple_choice' || type === 'poll') && payload.options !== undefined) {
+      const optionsArr = Array.isArray(payload.options)
+        ? payload.options.map(s => String(s || '').trim()).filter(Boolean)
+        : [];
+      if (optionsArr.length < 2) return { ok: false, error: 'at least 2 options required' };
+      if (optionsArr.length > 8) return { ok: false, error: 'at most 8 options' };
+      optionsJson = JSON.stringify(optionsArr);
+    }
+    if (type === 'multiple_choice' && payload.correct_option !== undefined) {
+      const c = parseInt(payload.correct_option, 10);
+      const opts = parsePromptOptions_(optionsJson);
+      correctOption = (c >= 1 && c <= opts.length) ? c : '';
+    }
+    if (type === 'rating' && payload.rating_scale !== undefined) {
+      const s = parseInt(payload.rating_scale, 10);
+      ratingScale = (s >= 2 && s <= 10) ? s : 5;
+    }
+
+    sheet.getRange(rowIndex, 4).setValue(title);
+    sheet.getRange(rowIndex, 5).setValue(body);
+    sheet.getRange(rowIndex, 7).setValue(closesAt);
+    sheet.getRange(rowIndex, 8).setValue(audience);
+    sheet.getRange(rowIndex, 11, 1, 3).setValues([[optionsJson, correctOption, ratingScale]]);
+
+    return {
+      ok: true,
+      prompt: {
+        id: promptId,
+        created_at: rowVals[1] instanceof Date ? rowVals[1].toISOString() : String(rowVals[1]),
+        teacher_email: rowVals[2],
+        title,
+        body,
+        status: rowVals[5],
+        closes_at: closesAt,
+        audience,
+        shared_from: rowVals[8] || '',
+        type,
+        options: parsePromptOptions_(optionsJson),
+        correct_option: correctOption || null,
+        rating_scale: ratingScale || null,
+      },
+    };
   }
   return { ok: false, error: 'not found' };
 }

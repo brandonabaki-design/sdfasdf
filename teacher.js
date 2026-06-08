@@ -1,6 +1,7 @@
 // Teacher page logic. Auth + api() helpers live in auth.js.
 
 let currentDraftId = null;
+let currentEditPromptId = null;
 let currentSharePromptId = null;
 
 const TYPE_LABELS = {
@@ -416,6 +417,7 @@ function renderTeacherPromptCard(p) {
         <button type="button" class="link-btn toggle-students">View by student</button>
         <button type="button" class="link-btn summarize-btn">Generate AI summary</button>
         <button type="button" class="link-btn share-btn">Share with teacher</button>
+        <button type="button" class="link-btn edit-btn">Edit</button>
       </div>
     </header>
     <div class="responses-panel" hidden>
@@ -446,6 +448,7 @@ function renderTeacherPromptCard(p) {
   }
 
   card.querySelector('.share-btn').addEventListener('click', () => openShareModal(p));
+  card.querySelector('.edit-btn').addEventListener('click', () => beginEditPrompt(p));
 
   // Show responses
   const toggleBtn = card.querySelector('.toggle-responses');
@@ -1004,7 +1007,46 @@ function renderDraftCard(d) {
   return card;
 }
 
+function beginEditPrompt(p) {
+  // Cancel any draft customisation in progress.
+  if (currentDraftId) cancelDraftCustomisation();
+  currentEditPromptId = p.id;
+  document.getElementById('prompt-type').value = p.type || 'open';
+  document.getElementById('prompt-title').value = p.title || '';
+  document.getElementById('prompt-body').value = p.body || '';
+  document.getElementById('prompt-audience').value = p.audience || '';
+  document.getElementById('prompt-closes-at').value = isoToDatetimeLocal(p.closes_at);
+  document.getElementById('prompt-options').value = (p.options || []).join('\n');
+  document.getElementById('prompt-correct').value = p.correct_option || '';
+  document.getElementById('prompt-rating-scale').value = p.rating_scale || 5;
+  applyFormTypeUI(p.type || 'open');
+
+  document.getElementById('form-title').textContent = 'Edit prompt';
+  document.getElementById('form-subtitle').textContent = 'Update the prompt. Students who already responded keep their submissions.';
+  document.getElementById('publish-btn').textContent = 'Save changes';
+
+  document.getElementById('edit-banner').hidden = false;
+  document.getElementById('edit-title-display').textContent = p.title || '(untitled)';
+
+  document.getElementById('prompt-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('prompt-title').focus();
+}
+
+function cancelEditPrompt() {
+  currentEditPromptId = null;
+  document.getElementById('prompt-form').reset();
+  document.getElementById('prompt-type').value = 'open';
+  document.getElementById('prompt-rating-scale').value = 5;
+  applyFormTypeUI('open');
+  document.getElementById('form-title').textContent = 'Create a prompt';
+  document.getElementById('form-subtitle').textContent = 'Publish a question or activity. Students see it instantly.';
+  document.getElementById('publish-btn').textContent = 'Publish prompt';
+  document.getElementById('edit-banner').hidden = true;
+  document.getElementById('result').textContent = '';
+}
+
 function beginDraftCustomisation(d) {
+  if (currentEditPromptId) cancelEditPrompt();
   currentDraftId = d.id;
   document.getElementById('prompt-type').value = d.type || 'open';
   document.getElementById('prompt-title').value = d.title || '';
@@ -1206,15 +1248,19 @@ async function submitPrompt(event) {
 
   try {
     let data;
-    if (currentDraftId) {
+    if (currentEditPromptId) {
+      data = await api('update_prompt', { prompt_id: currentEditPromptId, ...payload });
+    } else if (currentDraftId) {
       data = await api('publish_draft', { draft_id: currentDraftId, ...payload });
     } else {
       data = await api('create_prompt', payload);
     }
     if (data.ok) {
-      result.textContent = currentDraftId ? 'Draft published.' : 'Published.';
+      result.textContent = currentEditPromptId ? 'Saved.' : (currentDraftId ? 'Draft published.' : 'Published.');
       const wasDraft = !!currentDraftId;
-      cancelDraftCustomisation();
+      const wasEdit = !!currentEditPromptId;
+      if (wasEdit) cancelEditPrompt();
+      else cancelDraftCustomisation();
       loadPrompts();
       if (wasDraft) loadDrafts();
     } else {
@@ -1230,6 +1276,7 @@ async function submitPrompt(event) {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('prompt-form').addEventListener('submit', submitPrompt);
   document.getElementById('cancel-draft').addEventListener('click', cancelDraftCustomisation);
+  document.getElementById('cancel-edit').addEventListener('click', cancelEditPrompt);
   document.getElementById('prompt-type').addEventListener('change', (e) => applyFormTypeUI(e.target.value));
   applyFormTypeUI('open');
   renderTemplatesRow();

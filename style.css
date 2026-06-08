@@ -2258,6 +2258,11 @@ body:not(.is-signed-in) #checkouts-btn { display: none !important; }
   color: var(--amber-bright);
 }
 .draft-banner strong { color: white; }
+.draft-banner.edit-mode {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.08));
+  border-color: rgba(129, 140, 248, 0.42);
+  color: var(--indigo-bright);
+}
 
 /* ============================================================
    Share modal
