@@ -204,6 +204,9 @@ function doPost(e) {
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
         return jsonOut_({ ok: true, suggestion: suggestPrompt_(payload.topic || '', payload.type || 'open') });
 
+      case 'ask_study_buddy':
+        return jsonOut_({ ok: true, reply: askStudyBuddy_(payload.messages || []) });
+
       case 'list_my_responses':
         return jsonOut_({ ok: true, responses: listResponsesForStudent_(claims.sub) });
 
@@ -1641,6 +1644,65 @@ function getPollResults_(promptId) {
   if (String(prompt.type || '').toLowerCase() !== 'poll') return { type: 'poll', total: 0, options: [] };
   const summary = getStructuredSummary_(promptId);
   return { type: 'poll', total: summary.total, options: summary.options };
+}
+
+function askStudyBuddy_(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) throw new Error('no message');
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+  const model = props.getProperty('GEMINI_MODEL') || DEFAULT_GEMINI_MODEL;
+
+  // Length guard to stop runaway prompts
+  const cleanedMessages = messages.slice(-12).map(m => ({
+    role: String(m.role || 'user') === 'model' ? 'model' : 'user',
+    parts: [{ text: String(m.text || '').slice(0, 4000) }],
+  }));
+
+  const systemPrompt =
+    "You are AISA Study Buddy — a kind, patient tutor talking to a K-12 student at " +
+    "the American International School in Abu Dhabi. " +
+    "Rules:\n" +
+    "1. Be warm and encouraging. Use plain language, short sentences, and concrete examples.\n" +
+    "2. Match the student's apparent level — don't talk down, don't go over their head.\n" +
+    "3. Help the student think — when they ask homework questions, guide them toward the " +
+    "answer with hints and small steps rather than dumping the solution. Only give the " +
+    "answer if they ask directly for it.\n" +
+    "4. Never write a whole essay or response for them. You can help brainstorm or fix one " +
+    "sentence at a time.\n" +
+    "5. If the student shows distress, gently encourage them to talk to a trusted adult and " +
+    "stop trying to solve the academic problem.\n" +
+    "6. Keep replies to 4-8 short sentences unless they explicitly ask for more detail.\n" +
+    "7. Don't pretend to remember previous sessions — only use the current chat.\n" +
+    "8. Stay culturally neutral and age-appropriate for the UAE school context.";
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(apiKey);
+  const requestBody = {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: cleanedMessages,
+    generationConfig: { temperature: 0.6, maxOutputTokens: 800 },
+  };
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(requestBody),
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) {
+    throw new Error('Gemini API ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+  }
+  const data = JSON.parse(res.getContentText());
+  const candidate = data.candidates && data.candidates[0];
+  if (!candidate) throw new Error('No reply');
+  const finishReason = candidate.finishReason || 'STOP';
+  const text = (candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text) || '';
+  if (finishReason !== 'STOP') {
+    // Distress safety block or similar — guide the student to a human.
+    return "I'd rather you talk to a trusted adult about this — a teacher, counsellor, or family member can really help. I'll be here when you want to study something together.";
+  }
+  if (!text) throw new Error('Empty reply');
+  return String(text).trim();
 }
 
 function suggestPrompt_(topic, type) {

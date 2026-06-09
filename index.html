@@ -121,53 +121,218 @@
     </section>
 
     <section id="signed-in" hidden>
-      <header class="page-header">
-        <div>
-          <h2 class="page-title font-heading">Today's prompts</h2>
-          <p class="page-subtitle">Respond to your teachers and get instant AI feedback.</p>
-        </div>
-        <button id="im-here" class="btn btn-amber">I'm here</button>
-      </header>
-      <p id="result" class="status-line" aria-live="polite"></p>
-
-      <!-- Check out / check in (compact strip) -->
+      <p id="result" class="status-line" aria-live="polite" hidden></p>
       <section id="checkout-card" class="checkout-strip" hidden></section>
 
-      <nav class="tab-nav" role="tablist" aria-label="Assignment categories">
-        <button class="tab is-active" data-tab="todo" role="tab" id="tab-todo" aria-selected="true">
-          <span class="tab-icon" aria-hidden="true">📝</span>
-          <span class="tab-label">To Do</span>
-          <span class="tab-count" id="tab-count-todo">0</span>
-        </button>
-        <button class="tab" data-tab="work" role="tab" id="tab-work" aria-selected="false">
-          <span class="tab-icon" aria-hidden="true">✅</span>
-          <span class="tab-label">My Work</span>
-          <span class="tab-count" id="tab-count-work">0</span>
-        </button>
-        <button class="tab" data-tab="notes" role="tab" id="tab-notes" aria-selected="false">
-          <span class="tab-icon" aria-hidden="true">📓</span>
-          <span class="tab-label">Notes</span>
-        </button>
-      </nav>
+      <!-- ====== HUB VIEW ====== -->
+      <div id="view-hub" class="view">
+        <!-- Personal hero -->
+        <header class="hub-hero">
+          <div class="hub-greeting">
+            <p class="hub-eyebrow" id="hub-date"></p>
+            <h1 class="hub-title font-heading">
+              <span id="hub-greeting-text">Welcome</span>,
+              <span id="hub-name" class="hub-name"></span>
+            </h1>
+            <p class="hub-subtitle" id="hub-subtitle">Here's everything you need today.</p>
+          </div>
+          <button id="im-here" class="btn btn-amber hub-im-here">I'm here</button>
+        </header>
 
-      <section id="panel-todo" class="tab-panel" role="tabpanel" aria-labelledby="tab-todo">
-        <div id="prompts-list" class="prompts-grid"></div>
-      </section>
+        <!-- Quick stats -->
+        <section class="hub-stats" aria-label="Today at a glance">
+          <div class="hub-stat hub-stat-todo">
+            <span class="hub-stat-icon">📝</span>
+            <span class="hub-stat-num" id="hub-todo-count">0</span>
+            <span class="hub-stat-label">to do</span>
+          </div>
+          <div class="hub-stat hub-stat-streak">
+            <span class="hub-stat-icon">🔥</span>
+            <span class="hub-stat-num" id="hub-streak">0</span>
+            <span class="hub-stat-label">day streak</span>
+          </div>
+          <div class="hub-stat hub-stat-work">
+            <span class="hub-stat-icon">✅</span>
+            <span class="hub-stat-num" id="hub-work-count">0</span>
+            <span class="hub-stat-label">done</span>
+          </div>
+          <div class="hub-stat hub-stat-badges">
+            <span class="hub-stat-icon">🏆</span>
+            <span class="hub-stat-num" id="hub-badges">0</span>
+            <span class="hub-stat-label">badges</span>
+          </div>
+        </section>
 
-      <section id="panel-work" class="tab-panel" role="tabpanel" aria-labelledby="tab-work" hidden>
-        <div id="work-list" class="prompts-grid"></div>
-      </section>
-
-      <section id="panel-notes" class="tab-panel" role="tabpanel" aria-labelledby="tab-notes" hidden>
-        <div class="notes-card">
-          <header class="notes-header">
-            <h3 class="font-heading">Your notes</h3>
-            <p class="muted small">Jot down anything — only you can see this. Saved automatically on this device.</p>
+        <!-- Up next focus card -->
+        <section class="up-next-section" aria-labelledby="up-next-heading">
+          <header class="hub-section-header">
+            <h2 class="hub-section-title font-heading" id="up-next-heading">Up next</h2>
           </header>
-          <textarea id="notes-textarea" rows="14" placeholder="Today I learned…&#10;Questions to ask…&#10;Ideas for my next response…"></textarea>
+          <div id="up-next" class="up-next"></div>
+        </section>
+
+        <!-- Tools grid -->
+        <section class="tools-section" aria-labelledby="tools-heading">
+          <header class="hub-section-header">
+            <h2 class="hub-section-title font-heading" id="tools-heading">Your tools</h2>
+            <p class="hub-section-sub">Tap a card to open the tool.</p>
+          </header>
+          <div class="tools-grid">
+            <button class="tool-card tool-blue" data-view="assignments" type="button">
+              <span class="tool-icon" aria-hidden="true">📝</span>
+              <span class="tool-title font-heading">Assignments</span>
+              <span class="tool-desc">Today's prompts from your teachers</span>
+              <span class="tool-badge" id="tool-badge-assignments" hidden></span>
+            </button>
+            <button class="tool-card tool-emerald" data-view="work" type="button">
+              <span class="tool-icon" aria-hidden="true">📁</span>
+              <span class="tool-title font-heading">My Work</span>
+              <span class="tool-desc">Your submissions &amp; the AI feedback you've earned</span>
+            </button>
+            <button class="tool-card tool-amber" data-view="notes" type="button">
+              <span class="tool-icon" aria-hidden="true">📓</span>
+              <span class="tool-title font-heading">Notes</span>
+              <span class="tool-desc">Your personal notebook — autosaves as you type</span>
+            </button>
+            <button class="tool-card tool-violet" data-view="study" type="button">
+              <span class="tool-icon" aria-hidden="true">🤖</span>
+              <span class="tool-title font-heading">AI Study Buddy</span>
+              <span class="tool-desc">Ask anything — get a friendly explanation</span>
+            </button>
+            <button class="tool-card tool-rose" data-view="focus" type="button">
+              <span class="tool-icon" aria-hidden="true">⏱️</span>
+              <span class="tool-title font-heading">Focus Timer</span>
+              <span class="tool-desc">25 minutes of deep work, 5 of rest</span>
+            </button>
+            <button class="tool-card tool-cyan" data-view="goals" type="button">
+              <span class="tool-icon" aria-hidden="true">🎯</span>
+              <span class="tool-title font-heading">My Goals</span>
+              <span class="tool-desc">Set personal learning goals &amp; check them off</span>
+            </button>
+            <a class="tool-card tool-indigo" href="progress.html">
+              <span class="tool-icon" aria-hidden="true">📊</span>
+              <span class="tool-title font-heading">My Progress</span>
+              <span class="tool-desc">Streak, badges, leaderboards, AI feedback gallery</span>
+            </a>
+            <button class="tool-card tool-slate" data-view="im-here-info" type="button">
+              <span class="tool-icon" aria-hidden="true">✋</span>
+              <span class="tool-title font-heading">I'm here</span>
+              <span class="tool-desc">Log that you're in class today</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Recent activity -->
+        <section class="hub-recent" aria-labelledby="recent-heading">
+          <header class="hub-section-header">
+            <h2 class="hub-section-title font-heading" id="recent-heading">Recent activity</h2>
+          </header>
+          <ul id="hub-recent-feed" class="hub-recent-feed"></ul>
+        </section>
+      </div>
+
+      <!-- ====== TOOL VIEWS ====== -->
+
+      <!-- Assignments -->
+      <div id="view-assignments" class="view" hidden>
+        <header class="view-header">
+          <button class="back-to-hub" type="button" data-back>← Back to Hub</button>
+          <h2 class="view-title font-heading">📝 Assignments</h2>
+          <p class="view-sub">Pending prompts from your teachers. Respond, then mark complete.</p>
+        </header>
+        <div id="prompts-list" class="prompts-grid"></div>
+      </div>
+
+      <!-- My Work -->
+      <div id="view-work" class="view" hidden>
+        <header class="view-header">
+          <button class="back-to-hub" type="button" data-back>← Back to Hub</button>
+          <h2 class="view-title font-heading">📁 My Work</h2>
+          <p class="view-sub">Completed assignments with your responses and the AI feedback you received.</p>
+        </header>
+        <div id="work-list" class="prompts-grid"></div>
+      </div>
+
+      <!-- Notes -->
+      <div id="view-notes" class="view" hidden>
+        <header class="view-header">
+          <button class="back-to-hub" type="button" data-back>← Back to Hub</button>
+          <h2 class="view-title font-heading">📓 Notes</h2>
+          <p class="view-sub">Your private notebook. Only you can see this; it saves automatically.</p>
+        </header>
+        <div class="notes-card">
+          <textarea id="notes-textarea" rows="18" placeholder="Today I learned…&#10;Questions to ask in class…&#10;Ideas for my next response…"></textarea>
           <p class="notes-status muted small" id="notes-status">Not saved yet.</p>
         </div>
-      </section>
+      </div>
+
+      <!-- AI Study Buddy -->
+      <div id="view-study" class="view" hidden>
+        <header class="view-header">
+          <button class="back-to-hub" type="button" data-back>← Back to Hub</button>
+          <h2 class="view-title font-heading">🤖 AI Study Buddy</h2>
+          <p class="view-sub">Ask anything. I'll explain it clearly and help you think through it. I won't do your homework for you, but I'll help you do it.</p>
+        </header>
+        <div class="study-chat">
+          <div id="study-messages" class="study-messages" aria-live="polite"></div>
+          <form id="study-form" class="study-form">
+            <textarea id="study-input" rows="2" placeholder="Type a question... (e.g. 'Explain photosynthesis in simple words')" maxlength="2000"></textarea>
+            <button type="submit" class="btn btn-primary" id="study-send">Send</button>
+          </form>
+          <p class="muted small" style="margin: 8px 0 0;">Tip: the more specific you are, the better I can help.</p>
+        </div>
+      </div>
+
+      <!-- Focus Timer -->
+      <div id="view-focus" class="view" hidden>
+        <header class="view-header">
+          <button class="back-to-hub" type="button" data-back>← Back to Hub</button>
+          <h2 class="view-title font-heading">⏱️ Focus Timer</h2>
+          <p class="view-sub">Pomodoro — 25 minutes of focused work, then 5 minutes of rest. Repeat.</p>
+        </header>
+        <div class="focus-card" id="focus-card">
+          <p class="focus-mode" id="focus-mode">Focus</p>
+          <div class="focus-ring">
+            <svg viewBox="0 0 100 100" class="focus-svg" aria-hidden="true">
+              <circle cx="50" cy="50" r="46" class="focus-ring-bg"></circle>
+              <circle cx="50" cy="50" r="46" class="focus-ring-fill" id="focus-ring-fill"></circle>
+            </svg>
+            <span class="focus-time" id="focus-time">25:00</span>
+          </div>
+          <div class="focus-actions">
+            <button class="btn btn-primary" id="focus-start" type="button">Start</button>
+            <button class="btn btn-ghost" id="focus-reset" type="button">Reset</button>
+          </div>
+          <p class="focus-stats" id="focus-stats">0 sessions today</p>
+        </div>
+      </div>
+
+      <!-- My Goals -->
+      <div id="view-goals" class="view" hidden>
+        <header class="view-header">
+          <button class="back-to-hub" type="button" data-back>← Back to Hub</button>
+          <h2 class="view-title font-heading">🎯 My Goals</h2>
+          <p class="view-sub">Add a goal you want to hit this week. Check it off when you do.</p>
+        </header>
+        <form id="goal-form" class="goal-form">
+          <input id="goal-input" type="text" maxlength="120" placeholder="e.g. Respond to every prompt this week" />
+          <button type="submit" class="btn btn-primary">Add goal</button>
+        </form>
+        <ul id="goals-list" class="goals-list"></ul>
+      </div>
+
+      <!-- I'm here info -->
+      <div id="view-im-here-info" class="view" hidden>
+        <header class="view-header">
+          <button class="back-to-hub" type="button" data-back>← Back to Hub</button>
+          <h2 class="view-title font-heading">✋ I'm here</h2>
+          <p class="view-sub">Tap below to log that you're in class today. Your teacher can see it.</p>
+        </header>
+        <div class="im-here-card">
+          <button id="im-here-big" class="btn btn-amber im-here-big" type="button">I'm here</button>
+          <p class="muted small" id="im-here-status" aria-live="polite"></p>
+        </div>
+      </div>
     </section>
 
     <!-- Step-out modal (unified: picker + status) -->

@@ -87,9 +87,26 @@ function showSignedIn(user) {
   document.getElementById('signed-in').hidden = false;
   document.getElementById('user-name').textContent = user.name || '';
   document.getElementById('user-email').textContent = user.email || '';
+  const first = (user.name || user.email || '').split(/[\s@]/)[0] || 'friend';
+  const hubName = document.getElementById('hub-name');
+  if (hubName) hubName.textContent = first;
+  const hubGreet = document.getElementById('hub-greeting-text');
+  if (hubGreet) hubGreet.textContent = greetingForTime();
+  const hubDate = document.getElementById('hub-date');
+  if (hubDate) {
+    hubDate.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  }
   loadPrompts();
   loadTeachers();
   refreshCheckoutState();
+}
+
+function greetingForTime() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  if (h < 21) return 'Good evening';
+  return 'Working late';
 }
 
 function showSignedOut() {
@@ -136,38 +153,169 @@ function renderPromptTabs() {
   const todo = allPrompts.filter(p => !p.completed);
   const work = allPrompts.filter(p => p.completed);
 
-  // Update counts
-  const todoCount = document.getElementById('tab-count-todo');
-  const workCount = document.getElementById('tab-count-work');
-  if (todoCount) todoCount.textContent = String(todo.length);
-  if (workCount) workCount.textContent = String(work.length);
+  // Hub stat numbers
+  const hubTodo = document.getElementById('hub-todo-count');
+  const hubWork = document.getElementById('hub-work-count');
+  if (hubTodo) hubTodo.textContent = String(todo.length);
+  if (hubWork) hubWork.textContent = String(work.length);
 
-  // To Do panel
-  const todoList = document.getElementById('prompts-list');
-  todoList.innerHTML = '';
-  if (todo.length === 0) {
-    todoList.innerHTML = `
-      <div class="empty-state">
-        <span class="empty-icon">🎉</span>
-        <h3>All caught up</h3>
-        <p>You don't have any pending assignments right now. Nice work.</p>
-      </div>`;
-  } else {
-    for (const p of todo) todoList.appendChild(renderPromptCard(p));
+  // Tool card badge
+  const badge = document.getElementById('tool-badge-assignments');
+  if (badge) {
+    if (todo.length > 0) { badge.hidden = false; badge.textContent = String(todo.length); }
+    else { badge.hidden = true; }
   }
 
-  // My Work panel
+  // Hero subtitle
+  const subtitle = document.getElementById('hub-subtitle');
+  if (subtitle) {
+    if (todo.length === 0) subtitle.textContent = "🎉 All caught up — enjoy a tool below.";
+    else if (todo.length === 1) subtitle.textContent = "You have 1 assignment to work on today.";
+    else subtitle.textContent = `You have ${todo.length} assignments to work on today.`;
+  }
+
+  // Up next focus card
+  renderUpNext(todo);
+
+  // To Do view
+  const todoList = document.getElementById('prompts-list');
+  if (todoList) {
+    todoList.innerHTML = '';
+    if (todo.length === 0) {
+      todoList.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">🎉</span>
+          <h3>All caught up</h3>
+          <p>You don't have any pending assignments right now. Nice work.</p>
+        </div>`;
+    } else {
+      for (const p of todo) todoList.appendChild(renderPromptCard(p));
+    }
+  }
+
+  // My Work view
   const workList = document.getElementById('work-list');
-  workList.innerHTML = '';
-  if (work.length === 0) {
-    workList.innerHTML = `
-      <div class="empty-state">
-        <span class="empty-icon">📁</span>
-        <h3>Nothing here yet</h3>
-        <p>Completed assignments will show up here along with the AI feedback you received.</p>
+  if (workList) {
+    workList.innerHTML = '';
+    if (work.length === 0) {
+      workList.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">📁</span>
+          <h3>Nothing here yet</h3>
+          <p>Completed assignments will show up here along with the AI feedback you received.</p>
+        </div>`;
+    } else {
+      for (const p of work) workList.appendChild(renderPromptCard(p));
+    }
+  }
+
+  renderRecentActivity();
+  renderHubStats();
+}
+
+function renderUpNext(todo) {
+  const container = document.getElementById('up-next');
+  if (!container) return;
+  if (todo.length === 0) {
+    container.innerHTML = `
+      <div class="up-next-empty">
+        <span class="up-next-emoji">🌱</span>
+        <p class="up-next-empty-text">You're all caught up. Try the AI Study Buddy or set a new goal below.</p>
       </div>`;
-  } else {
-    for (const p of work) workList.appendChild(renderPromptCard(p));
+    return;
+  }
+  // Pick the oldest (most overdue / waiting longest)
+  const p = todo[0];
+  const closesAt = p.closes_at ? new Date(p.closes_at) : null;
+  const closesNote = (closesAt && !isNaN(closesAt.getTime()))
+    ? `Closes ${friendlyTime(closesAt.toISOString())}`
+    : 'No deadline';
+  container.innerHTML = `
+    <article class="up-next-card">
+      <div class="up-next-meta">
+        <span class="up-next-pill">📝 Next up</span>
+        <span class="up-next-closes muted">${escapeHtmlSafe(closesNote)}</span>
+      </div>
+      <h3 class="up-next-title font-heading"></h3>
+      <p class="up-next-body"></p>
+      <button class="btn btn-primary up-next-cta" type="button" data-view="assignments">Open assignment →</button>
+    </article>`;
+  container.querySelector('.up-next-title').textContent = p.title || '(untitled)';
+  const bodyEl = container.querySelector('.up-next-body');
+  const bodyText = String(p.body || '');
+  bodyEl.textContent = bodyText.length > 220 ? bodyText.slice(0, 220) + '…' : bodyText;
+}
+
+function escapeHtmlSafe(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderHubStats() {
+  // Streak: count consecutive days back from today with a response
+  const byDay = {};
+  for (const r of allResponses) {
+    const key = String(r.created_at).slice(0, 10);
+    byDay[key] = true;
+  }
+  let streak = 0;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    if (byDay[key]) streak++;
+    else if (i === 0) continue;
+    else break;
+  }
+  const hubStreak = document.getElementById('hub-streak');
+  if (hubStreak) hubStreak.textContent = String(streak);
+
+  // Badges (cheap derivation; matches progress page logic)
+  const totalResponses = allResponses.length;
+  const badges = [
+    totalResponses >= 1,
+    totalResponses >= 5,
+    totalResponses >= 25,
+    streak >= 3,
+    streak >= 7,
+  ].filter(Boolean).length;
+  const hubBadges = document.getElementById('hub-badges');
+  if (hubBadges) hubBadges.textContent = String(badges);
+}
+
+function renderRecentActivity() {
+  const feed = document.getElementById('hub-recent-feed');
+  if (!feed) return;
+  feed.innerHTML = '';
+  if (!allResponses || allResponses.length === 0) {
+    feed.innerHTML = `
+      <li class="hub-recent-empty">
+        <span class="muted">Your recent responses and AI feedback will appear here.</span>
+      </li>`;
+    return;
+  }
+  const recent = allResponses.slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, 5);
+  for (const r of recent) {
+    const li = document.createElement('li');
+    li.className = 'hub-recent-item';
+    const icon = r.flagged ? '⚠️' : (r.ai_feedback ? '✨' : '✓');
+    li.innerHTML = `
+      <span class="hub-recent-icon" aria-hidden="true"></span>
+      <div class="hub-recent-text">
+        <p class="hub-recent-title"></p>
+        <p class="hub-recent-meta muted small"></p>
+      </div>
+      <span class="hub-recent-time muted small"></span>
+    `;
+    li.querySelector('.hub-recent-icon').textContent = icon;
+    li.querySelector('.hub-recent-title').textContent = `Responded to "${r.prompt_title || '(untitled)'}"`;
+    const meta = r.ai_feedback ? 'AI feedback ready' : (r.flagged ? 'A teacher will follow up' : 'Submission saved');
+    li.querySelector('.hub-recent-meta').textContent = meta;
+    li.querySelector('.hub-recent-time').textContent = friendlyTime(r.created_at);
+    feed.appendChild(li);
   }
 }
 
@@ -756,13 +904,28 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('checkout-modal-backdrop').addEventListener('click', closeCheckoutModal);
   document.getElementById('checkout-modal-submit').addEventListener('click', submitCheckout);
 
-  // Tab switching
-  document.querySelectorAll('.tab-nav .tab').forEach(tab => {
-    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  // Hub: tool cards + back buttons
+  document.querySelectorAll('[data-view]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const view = el.dataset.view;
+      if (view) { e.preventDefault(); switchView(view); }
+    });
+  });
+  document.querySelectorAll('[data-back]').forEach(el => {
+    el.addEventListener('click', () => switchView('hub'));
   });
 
   // Notes — load saved + autosave on input
   setupNotes();
+  // AI Study Buddy
+  setupStudyBuddy();
+  // Focus Timer
+  setupFocusTimer();
+  // Goals
+  setupGoals();
+  // Hub-level "I'm here" button
+  const imHereBig = document.getElementById('im-here-big');
+  if (imHereBig) imHereBig.addEventListener('click', () => logImHereBig());
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -772,15 +935,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-function switchTab(name) {
-  document.querySelectorAll('.tab-nav .tab').forEach(tab => {
-    const active = tab.dataset.tab === name;
-    tab.classList.toggle('is-active', active);
-    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+function switchView(name) {
+  document.querySelectorAll('#signed-in .view').forEach(view => {
+    view.hidden = view.id !== `view-${name}`;
   });
-  document.querySelectorAll('.tab-panel').forEach(panel => {
-    panel.hidden = panel.id !== `panel-${name}`;
-  });
+  // Scroll to top of the freshly opened view
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function notesStorageKey() {
@@ -819,6 +979,279 @@ function setupNotes() {
       }
     }, 400);
   });
+}
+
+/* ============================================================
+   AI Study Buddy
+   ============================================================ */
+
+let studyHistory = [];
+
+function setupStudyBuddy() {
+  const form = document.getElementById('study-form');
+  const input = document.getElementById('study-input');
+  const messages = document.getElementById('study-messages');
+  if (!form || !input || !messages) return;
+
+  document.addEventListener('aisa:signed-in', () => {
+    studyHistory = [];
+    messages.innerHTML = `
+      <div class="study-msg study-msg-model">
+        <span class="study-msg-avatar">🤖</span>
+        <div class="study-msg-bubble">
+          <p>Hi! I'm your Study Buddy. Ask me anything — I'll explain it in plain language and help you think it through. What are you working on?</p>
+        </div>
+      </div>`;
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    appendStudyMessage('user', text);
+    studyHistory.push({ role: 'user', text });
+    input.value = '';
+    input.focus();
+    appendStudyMessage('model', '…', 'study-msg-loading');
+    try {
+      const data = await api('ask_study_buddy', { messages: studyHistory });
+      // Remove the loading bubble
+      const loading = messages.querySelector('.study-msg-loading');
+      if (loading) loading.remove();
+      if (!data.ok) {
+        appendStudyMessage('model', friendlyError(data.error));
+        return;
+      }
+      const reply = String(data.reply || '').trim() || "Sorry, I couldn't think of a reply.";
+      studyHistory.push({ role: 'model', text: reply });
+      appendStudyMessage('model', reply);
+    } catch (err) {
+      const loading = messages.querySelector('.study-msg-loading');
+      if (loading) loading.remove();
+      appendStudyMessage('model', 'Network error: ' + err.message);
+    }
+  });
+}
+
+function appendStudyMessage(role, text, extraClass) {
+  const messages = document.getElementById('study-messages');
+  if (!messages) return;
+  const wrap = document.createElement('div');
+  wrap.className = `study-msg study-msg-${role}` + (extraClass ? ' ' + extraClass : '');
+  wrap.innerHTML = `
+    <span class="study-msg-avatar"></span>
+    <div class="study-msg-bubble"></div>
+  `;
+  wrap.querySelector('.study-msg-avatar').textContent = role === 'user' ? '🧑' : '🤖';
+  wrap.querySelector('.study-msg-bubble').textContent = text;
+  messages.appendChild(wrap);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+/* ============================================================
+   Focus Timer (Pomodoro)
+   ============================================================ */
+
+const FOCUS_WORK_SECONDS = 25 * 60;
+const FOCUS_REST_SECONDS = 5 * 60;
+let focusMode = 'work';
+let focusSecondsLeft = FOCUS_WORK_SECONDS;
+let focusTimerId = null;
+let focusSessionsToday = 0;
+
+function setupFocusTimer() {
+  const startBtn = document.getElementById('focus-start');
+  const resetBtn = document.getElementById('focus-reset');
+  if (!startBtn || !resetBtn) return;
+  startBtn.addEventListener('click', toggleFocusTimer);
+  resetBtn.addEventListener('click', resetFocusTimer);
+  // Restore sessions count for today
+  try {
+    const key = focusStorageKey();
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      const todayKey = new Date().toISOString().slice(0, 10);
+      if (obj.date === todayKey) focusSessionsToday = obj.sessions || 0;
+    }
+  } catch (_) {}
+  renderFocus();
+}
+
+function focusStorageKey() {
+  const email = currentUser && currentUser.email ? currentUser.email : 'anon';
+  return 'aisa.focus.' + email;
+}
+
+function persistFocusSessions() {
+  try {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    localStorage.setItem(focusStorageKey(), JSON.stringify({ date: todayKey, sessions: focusSessionsToday }));
+  } catch (_) {}
+}
+
+function toggleFocusTimer() {
+  const startBtn = document.getElementById('focus-start');
+  if (focusTimerId) {
+    clearInterval(focusTimerId);
+    focusTimerId = null;
+    startBtn.textContent = 'Start';
+  } else {
+    startBtn.textContent = 'Pause';
+    focusTimerId = setInterval(() => {
+      focusSecondsLeft--;
+      if (focusSecondsLeft <= 0) {
+        if (focusMode === 'work') {
+          focusSessionsToday++;
+          persistFocusSessions();
+          focusMode = 'rest';
+          focusSecondsLeft = FOCUS_REST_SECONDS;
+          announce("Time for a break. Five minutes.");
+        } else {
+          focusMode = 'work';
+          focusSecondsLeft = FOCUS_WORK_SECONDS;
+          announce("Break's over. Let's focus again.");
+        }
+      }
+      renderFocus();
+    }, 1000);
+  }
+}
+
+function resetFocusTimer() {
+  if (focusTimerId) { clearInterval(focusTimerId); focusTimerId = null; }
+  document.getElementById('focus-start').textContent = 'Start';
+  focusMode = 'work';
+  focusSecondsLeft = FOCUS_WORK_SECONDS;
+  renderFocus();
+}
+
+function renderFocus() {
+  const m = Math.floor(focusSecondsLeft / 60);
+  const s = focusSecondsLeft % 60;
+  const timeEl = document.getElementById('focus-time');
+  if (timeEl) timeEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+  const modeEl = document.getElementById('focus-mode');
+  if (modeEl) modeEl.textContent = focusMode === 'work' ? 'Focus' : 'Break';
+  const card = document.getElementById('focus-card');
+  if (card) card.classList.toggle('mode-rest', focusMode === 'rest');
+  // Ring progress
+  const total = focusMode === 'work' ? FOCUS_WORK_SECONDS : FOCUS_REST_SECONDS;
+  const fraction = focusSecondsLeft / total;
+  const fill = document.getElementById('focus-ring-fill');
+  if (fill) {
+    const circumference = 2 * Math.PI * 46;
+    fill.style.strokeDasharray = `${circumference}`;
+    fill.style.strokeDashoffset = `${circumference * (1 - fraction)}`;
+  }
+  const stats = document.getElementById('focus-stats');
+  if (stats) {
+    stats.textContent = focusSessionsToday === 0
+      ? '0 sessions today — start your first one!'
+      : `${focusSessionsToday} session${focusSessionsToday === 1 ? '' : 's'} today 🎉`;
+  }
+}
+
+/* ============================================================
+   Goals
+   ============================================================ */
+
+let goals = [];
+
+function setupGoals() {
+  const form = document.getElementById('goal-form');
+  const input = document.getElementById('goal-input');
+  if (!form || !input) return;
+  document.addEventListener('aisa:signed-in', () => {
+    try {
+      const raw = localStorage.getItem(goalsStorageKey());
+      goals = raw ? JSON.parse(raw) : [];
+    } catch (_) { goals = []; }
+    renderGoals();
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    goals.unshift({ id: Date.now(), text, done: false, created_at: new Date().toISOString() });
+    persistGoals();
+    input.value = '';
+    renderGoals();
+  });
+}
+
+function goalsStorageKey() {
+  const email = currentUser && currentUser.email ? currentUser.email : 'anon';
+  return 'aisa.goals.' + email;
+}
+
+function persistGoals() {
+  try { localStorage.setItem(goalsStorageKey(), JSON.stringify(goals)); } catch (_) {}
+}
+
+function renderGoals() {
+  const list = document.getElementById('goals-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (goals.length === 0) {
+    list.innerHTML = `
+      <li class="empty-state goals-empty">
+        <span class="empty-icon">🎯</span>
+        <h3>No goals yet</h3>
+        <p>Add a goal above — keep it small and specific.</p>
+      </li>`;
+    return;
+  }
+  for (const g of goals) {
+    const li = document.createElement('li');
+    li.className = 'goal-row' + (g.done ? ' is-done' : '');
+    li.innerHTML = `
+      <label class="goal-check">
+        <input type="checkbox" />
+        <span class="goal-tick" aria-hidden="true">✓</span>
+      </label>
+      <span class="goal-text"></span>
+      <button class="goal-delete" type="button" aria-label="Delete goal">×</button>
+    `;
+    li.querySelector('input').checked = g.done;
+    li.querySelector('.goal-text').textContent = g.text;
+    li.querySelector('input').addEventListener('change', (e) => {
+      g.done = e.target.checked;
+      persistGoals();
+      li.classList.toggle('is-done', g.done);
+      if (g.done) announce('Goal completed!');
+    });
+    li.querySelector('.goal-delete').addEventListener('click', () => {
+      goals = goals.filter(x => x.id !== g.id);
+      persistGoals();
+      renderGoals();
+    });
+    list.appendChild(li);
+  }
+}
+
+/* ============================================================
+   I'm here (hub button + tool view)
+   ============================================================ */
+
+async function logImHereBig() {
+  const btn = document.getElementById('im-here-big');
+  const status = document.getElementById('im-here-status');
+  btn.disabled = true;
+  if (status) status.textContent = 'Logging…';
+  try {
+    const data = await api('im_here', { clientTimestamp: new Date().toISOString() });
+    if (data.ok) {
+      if (status) status.textContent = `Logged at ${new Date(data.timestamp).toLocaleTimeString()}.`;
+      announce("You're marked here today.");
+    } else {
+      if (status) status.textContent = friendlyError(data.error);
+    }
+  } catch (err) {
+    if (status) status.textContent = 'Network error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 document.addEventListener('aisa:signed-in', (e) => showSignedIn(e.detail));
