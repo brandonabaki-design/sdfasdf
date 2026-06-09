@@ -429,6 +429,119 @@ body::before {
   .menu-links { display: none; }
 }
 
+/* Account avatar + dropdown (replaces the old user-chip + sign-out button) */
+.account-wrap { position: relative; display: inline-flex; }
+.account-btn {
+  appearance: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--indigo), var(--violet));
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  transition: transform 0.12s, border-color 0.15s, box-shadow 0.15s;
+}
+.account-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+}
+.account-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--gold);
+}
+.account-avatar {
+  display: inline-block;
+  user-select: none;
+}
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 240px;
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+  padding: 12px 0 6px;
+  z-index: 40;
+}
+.account-menu::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 16px;
+  width: 12px;
+  height: 12px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-strong);
+  border-top: 1px solid var(--border-strong);
+  transform: rotate(45deg);
+}
+.account-menu-info {
+  padding: 4px 16px 12px;
+}
+.account-menu-name {
+  margin: 0;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+.account-menu-email {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+.account-menu-divider {
+  height: 1px;
+  background: var(--border-strong);
+  margin: 0 0 6px;
+}
+.account-menu-item {
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  border-radius: 0;
+}
+.account-menu-item:hover,
+.account-menu-item:focus-visible {
+  background: var(--bg-elevated);
+  outline: none;
+}
+.account-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
 .user-chip {
   display: inline-flex;
   align-items: center;
