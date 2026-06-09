@@ -285,3 +285,64 @@ async function api(action, payload) {
   }
   return data;
 }
+
+/* ============================================================
+   Student profile prefetch cache
+   ------------------------------------------------------------
+   The dashboard fires this on row hover; student.html consumes it on load
+   so the click feels instant. sessionStorage survives the full navigation
+   from dashboard -> student profile within the same tab.
+   ============================================================ */
+
+const PROFILE_CACHE_PREFIX = 'aisa.profile.v1:';
+const PROFILE_CACHE_TTL_MS = 90_000;
+const _profilePrefetchInFlight = new Map();
+
+function studentProfileCacheKey(sub, email) {
+  return PROFILE_CACHE_PREFIX + (sub || '') + ':' + String(email || '').toLowerCase();
+}
+
+function getCachedStudentProfile(sub, email) {
+  try {
+    const raw = sessionStorage.getItem(studentProfileCacheKey(sub, email));
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (!entry || !entry.t || Date.now() - entry.t > PROFILE_CACHE_TTL_MS) {
+      sessionStorage.removeItem(studentProfileCacheKey(sub, email));
+      return null;
+    }
+    return entry.p;
+  } catch (_) {
+    return null;
+  }
+}
+
+function putCachedStudentProfile(sub, email, profile) {
+  try {
+    sessionStorage.setItem(
+      studentProfileCacheKey(sub, email),
+      JSON.stringify({ t: Date.now(), p: profile })
+    );
+  } catch (_) { /* quota — silent */ }
+}
+
+function clearCachedStudentProfile(sub, email) {
+  try { sessionStorage.removeItem(studentProfileCacheKey(sub, email)); } catch (_) {}
+}
+
+// Fire-and-forget prefetch. Safe to call repeatedly: it dedupes in-flight
+// requests and skips when a fresh cache entry already exists.
+function prefetchStudentProfile(sub, email) {
+  if (!sub && !email) return;
+  if (!currentUser) return;
+  if (getCachedStudentProfile(sub, email)) return;
+  const key = studentProfileCacheKey(sub, email);
+  if (_profilePrefetchInFlight.has(key)) return;
+  const p = api('get_student_profile', { google_sub: sub || '', student_email: email || '' })
+    .then(data => {
+      if (data && data.ok && data.profile) putCachedStudentProfile(sub, email, data.profile);
+    })
+    .catch(() => { /* silent — the real load will surface any error */ })
+    .finally(() => { _profilePrefetchInFlight.delete(key); });
+  _profilePrefetchInFlight.set(key, p);
+}

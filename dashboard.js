@@ -213,6 +213,11 @@ function renderStudentsTable(students) {
     tr.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.location.href = href; }
     });
+    // Warm the cache when the teacher hovers or tab-focuses a row so the
+    // click lands on an already-loaded profile.
+    const warm = () => prefetchStudentProfile(s.google_sub || '', s.email || '');
+    tr.addEventListener('pointerenter', warm, { once: true });
+    tr.addEventListener('focusin', warm, { once: true });
     tbody.appendChild(tr);
   }
 }

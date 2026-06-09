@@ -28,30 +28,76 @@ function showSignedOut() {
   document.getElementById('signin-container').hidden = false;
 }
 
-async function loadProfile() {
+async function loadProfile(opts) {
+  const force = !!(opts && opts.force);
   const loading = document.getElementById('loading');
   const content = document.getElementById('profile-content');
-  loading.hidden = false;
-  content.hidden = true;
 
   const sub = getQueryParam('sub');
   const email = getQueryParam('email');
   if (!sub && !email) {
+    loading.hidden = false;
+    content.hidden = true;
     loading.innerHTML = '<div class="alert alert-error"><span class="alert-icon">⚠️</span><div>No student selected. Open this page from the Teacher Dashboard.</div></div>';
     return;
   }
+
+  // Hover-prefetched copy from the dashboard. When present, render instantly
+  // and skip the spinner entirely.
+  if (!force) {
+    const cached = getCachedStudentProfile(sub, email);
+    if (cached) {
+      currentProfile = cached;
+      loading.hidden = true;
+      content.hidden = false;
+      revealRefreshButton();
+      renderProfile(currentProfile);
+      return;
+    }
+  }
+
+  loading.hidden = false;
+  content.hidden = true;
   try {
-    const data = await api('get_student_profile', { google_sub: sub, student_email: email });
+    const data = await api('get_student_profile', {
+      google_sub: sub,
+      student_email: email,
+      force_refresh: force,
+    });
     if (!data.ok) {
       loading.innerHTML = `<div class="alert alert-error"><span class="alert-icon">⚠️</span><div>${friendlyError(data.error)}</div></div>`;
       return;
     }
     currentProfile = data.profile;
+    putCachedStudentProfile(sub, email, currentProfile);
     loading.hidden = true;
     content.hidden = false;
+    revealRefreshButton();
     renderProfile(currentProfile);
   } catch (err) {
     loading.innerHTML = `<div class="alert alert-error"><span class="alert-icon">⚠️</span><div>Network error: ${err.message}</div></div>`;
+  }
+}
+
+function revealRefreshButton() {
+  const btn = document.getElementById('refresh-profile-btn');
+  if (btn) btn.hidden = false;
+}
+
+async function refreshProfile() {
+  const btn = document.getElementById('refresh-profile-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.originalText = btn.textContent;
+    btn.textContent = 'Refreshing…';
+  }
+  const sub = getQueryParam('sub');
+  const email = getQueryParam('email');
+  clearCachedStudentProfile(sub, email);
+  await loadProfile({ force: true });
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = btn.dataset.originalText || 'Refresh';
   }
 }
 
@@ -436,6 +482,8 @@ function fillUl(ul, items) {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sign-out').addEventListener('click', signOut);
   document.getElementById('generate-summary-btn').addEventListener('click', generateSummary);
+  const refreshBtn = document.getElementById('refresh-profile-btn');
+  if (refreshBtn) refreshBtn.addEventListener('click', refreshProfile);
 });
 
 document.addEventListener('aisa:signed-in', (e) => showSignedIn(e.detail));

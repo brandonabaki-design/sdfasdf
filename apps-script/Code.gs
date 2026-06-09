@@ -184,7 +184,7 @@ function doPost(e) {
 
       case 'get_student_profile':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
-        return jsonOut_({ ok: true, profile: getStudentProfile_(claims, payload.google_sub || '', payload.student_email || '') });
+        return jsonOut_({ ok: true, profile: getStudentProfileCached_(claims, payload.google_sub || '', payload.student_email || '', payload.force_refresh === true) });
 
       case 'summarize_student':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
@@ -844,6 +844,31 @@ function getEngagementLeaderboards_(claims) {
     most_active: format(list, (a, b) => b.week_responses - a.week_responses || b.total_responses - a.total_responses, 'week_responses'),
     streak_champions: format(list, (a, b) => b.streak - a.streak || b.total_responses - a.total_responses, 'streak'),
   };
+}
+
+// 60-second per-teacher cache for student profiles. Each profile sweeps several
+// sheets so even a small TTL turns re-clicks (and tabbing back) into instant
+// loads. New activity may take up to a minute to surface — the Refresh button
+// on the profile page sets force_refresh to bypass.
+var STUDENT_PROFILE_CACHE_TTL_SECONDS = 60;
+
+function getStudentProfileCached_(claims, googleSub, studentEmail, forceRefresh) {
+  const cache = CacheService.getScriptCache();
+  const key = 'sp:v1:' + String(claims.email || '').toLowerCase()
+    + ':' + (googleSub || '') + ':' + (studentEmail || '').toLowerCase();
+  if (!forceRefresh) {
+    const hit = cache.get(key);
+    if (hit) {
+      try { return JSON.parse(hit); } catch (_) { /* fall through to recompute */ }
+    }
+  }
+  const profile = getStudentProfile_(claims, googleSub, studentEmail);
+  try {
+    // CacheService rejects values over 100KB; skip caching oversize profiles.
+    const serialized = JSON.stringify(profile);
+    if (serialized.length < 95000) cache.put(key, serialized, STUDENT_PROFILE_CACHE_TTL_SECONDS);
+  } catch (_) {}
+  return profile;
 }
 
 function getStudentProfile_(claims, googleSub, studentEmail) {
@@ -2517,6 +2542,15 @@ function resolveFlaggedResponse_(claims, payload) {
     followup,
     notes,
   ]);
+
+  // Invalidate the resolving teacher's cached copy of this student's profile
+  // so the next view shows the updated counts immediately. Other teachers'
+  // caches will expire on the 60s TTL.
+  try {
+    const cache = CacheService.getScriptCache();
+    const me = String(claims.email || '').toLowerCase();
+    cache.remove('sp:v1:' + me + ':' + (student.sub || '') + ':' + String(student.email || '').toLowerCase());
+  } catch (_) {}
 
   return { ok: true, flag_id: id, resolution_id: resolutionId };
 }
