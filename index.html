@@ -56,13 +56,7 @@
         <span>Assignments</span>
         <span class="assignments-count" id="assignments-count">0</span>
       </button>
-      <span id="user-chip" class="user-chip">
-        <span class="user-dot"></span>
-        <span id="user-name"></span>
-        <span class="muted">·</span>
-        <span id="user-email"></span>
-      </span>
-      <button id="sign-out" class="btn btn-ghost">Sign out</button>
+      <div id="account-slot"></div>
     </div>
   </nav>
 
@@ -446,6 +440,7 @@
 
   <script src="config.js"></script>
   <script src="auth.js"></script>
+  <script src="account-menu.js"></script>
   <script src="app.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
 </body>

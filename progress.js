@@ -50,8 +50,6 @@ async function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
   document.getElementById('signed-in').hidden = false;
-  document.getElementById('user-name').textContent = user.name || '';
-  document.getElementById('user-email').textContent = user.email || '';
   document.getElementById('hello-name').textContent = (user.name || user.email || '').split(' ')[0];
   await loadDashboard();
 }
@@ -477,7 +475,7 @@ function renderPromptProgress(items) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('sign-out').addEventListener('click', signOut);
+  // sign-out wired by account-menu.js
   document.getElementById('refresh-btn').addEventListener('click', loadDashboard);
 });
 

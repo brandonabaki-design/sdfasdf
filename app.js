@@ -85,8 +85,6 @@ function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
   document.getElementById('signed-in').hidden = false;
-  document.getElementById('user-name').textContent = user.name || '';
-  document.getElementById('user-email').textContent = user.email || '';
   const first = (user.name || user.email || '').split(/[\s@]/)[0] || 'friend';
   const hubName = document.getElementById('hub-name');
   if (hubName) hubName.textContent = first;
@@ -891,7 +889,7 @@ async function submitCheckIn() {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('im-here').addEventListener('click', logImHere);
-  document.getElementById('sign-out').addEventListener('click', signOut);
+  // sign-out wired by account-menu.js
   document.getElementById('assignments-btn').addEventListener('click', openAssignmentsPanel);
   document.getElementById('assignments-close').addEventListener('click', closeAssignmentsPanel);
   document.getElementById('assignments-backdrop').addEventListener('click', closeAssignmentsPanel);

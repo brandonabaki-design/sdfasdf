@@ -44,23 +44,7 @@
           <span>Flagged</span>
           <span class="flagged-count" id="flagged-count">0</span>
         </button>
-        <div class="account-wrap">
-          <button id="account-btn" class="account-btn" type="button"
-                  aria-haspopup="menu" aria-expanded="false" aria-label="Account" hidden>
-            <span class="account-avatar" id="account-initials" aria-hidden="true">··</span>
-          </button>
-          <div id="account-menu" class="account-menu" role="menu" hidden>
-            <div class="account-menu-info">
-              <p class="account-menu-name" id="account-menu-name"></p>
-              <p class="account-menu-email" id="account-menu-email"></p>
-            </div>
-            <div class="account-menu-divider" role="separator"></div>
-            <button class="account-menu-item" id="sign-out" type="button" role="menuitem">
-              <span class="account-menu-icon" aria-hidden="true">↪</span>
-              <span>Sign out</span>
-            </button>
-          </div>
-        </div>
+        <div id="account-slot"></div>
       </div>
     `;
 
@@ -76,62 +60,12 @@
       linksEl.appendChild(a);
     }
 
-    document.getElementById('sign-out').addEventListener('click', signOut);
-    document.getElementById('account-btn').addEventListener('click', toggleAccountMenu);
-    document.addEventListener('click', (e) => {
-      const wrap = document.querySelector('.account-wrap');
-      if (wrap && !wrap.contains(e.target)) closeAccountMenu();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeAccountMenu();
-    });
-  }
-
-  function initialsFrom(name, email) {
-    const src = (name || email || '').trim();
-    if (!src) return '··';
-    return src.split(/[\s@.]+/).filter(Boolean).slice(0, 2)
-      .map(p => p[0].toUpperCase()).join('') || '··';
-  }
-
-  function toggleAccountMenu() {
-    const menu = document.getElementById('account-menu');
-    const btn = document.getElementById('account-btn');
-    if (!menu || !btn) return;
-    const isOpen = !menu.hidden;
-    if (isOpen) closeAccountMenu();
-    else openAccountMenu();
-  }
-  function openAccountMenu() {
-    const menu = document.getElementById('account-menu');
-    const btn = document.getElementById('account-btn');
-    if (!menu || !btn) return;
-    menu.hidden = false;
-    btn.setAttribute('aria-expanded', 'true');
-  }
-  function closeAccountMenu() {
-    const menu = document.getElementById('account-menu');
-    const btn = document.getElementById('account-btn');
-    if (!menu || !btn) return;
-    menu.hidden = true;
-    btn.setAttribute('aria-expanded', 'false');
-  }
-
-  function reveal(user) {
-    const btn = document.getElementById('account-btn');
-    if (btn) btn.hidden = false;
-    const initialsEl = document.getElementById('account-initials');
-    const nameEl = document.getElementById('account-menu-name');
-    const emailEl = document.getElementById('account-menu-email');
-    if (initialsEl) initialsEl.textContent = initialsFrom(user.name, user.email);
-    if (nameEl) nameEl.textContent = user.name || '(no name)';
-    if (emailEl) emailEl.textContent = user.email || '';
-    if (btn) btn.setAttribute('aria-label', `Account — ${user.name || user.email || ''}`);
+    // Account avatar + dropdown are owned by account-menu.js, which fills
+    // the #account-slot we rendered above.
   }
 
   function hideAll() {
-    closeAccountMenu();
-    ['account-btn', 'checkouts-btn', 'flagged-btn'].forEach(id => {
+    ['checkouts-btn', 'flagged-btn'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.hidden = true;
     });
@@ -150,6 +84,5 @@
     render(nav, nav.dataset.page || '');
   });
 
-  document.addEventListener('aisa:signed-in', (e) => reveal(e.detail));
   document.addEventListener('aisa:signed-out', hideAll);
 })();
