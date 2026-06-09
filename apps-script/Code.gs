@@ -264,6 +264,28 @@ function isTeacher_(email) {
   return allowed.indexOf(String(email).toLowerCase()) !== -1;
 }
 
+// Returns the assigned teacher's email for a given student, or null.
+// Read order: STUDENT_TEACHER_MAP script property (JSON) takes precedence,
+// then a small built-in fallback we can ship safe defaults in.
+function getAssignedTeacher_(studentEmail) {
+  const email = String(studentEmail || '').toLowerCase();
+  if (!email) return null;
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty('STUDENT_TEACHER_MAP');
+    if (raw) {
+      const map = JSON.parse(raw);
+      for (const k of Object.keys(map)) {
+        if (String(k).toLowerCase() === email) return String(map[k]).toLowerCase();
+      }
+    }
+  } catch (err) { /* fall through to default map */ }
+  const DEFAULT_MAP = {
+    'bbaki@aisa.sch.ae': 'bbaki@aisa.sch.ae',
+    'hodai@aisa.sch.ae': 'bbaki@aisa.sch.ae',
+  };
+  return DEFAULT_MAP[email] || null;
+}
+
 function logEvent_(claims, action, clientTimestamp) {
   const sheet = getOrCreateSheet_(EVENTS_SHEET, EVENTS_HEADERS);
   const serverTimestamp = new Date();
@@ -1655,10 +1677,45 @@ function getPollResults_(promptId) {
    Unified safety pipeline — used by responses, notes, study chats
    ============================================================ */
 
+// First-line keyword safety net. Runs unconditionally — no API dependency —
+// so a missing/expired Gemini key, an outage, or a rate-limit doesn't disable
+// detection of the obvious phrases. The Gemini classifier still runs after
+// for subtler cases. Each regex below is checked case-insensitively against
+// the student's text; word boundaries are used to avoid false matches inside
+// other words (e.g. "killer" won't match "kill").
+const DISTRESS_KEYWORDS = [
+  // self-harm / suicidal ideation
+  { re: /\b(kill\s*(?:myself|me)|end\s+(?:my\s+life|it\s+all)|want\s+to\s+die|wanna\s+die|don'?t\s+want\s+to\s+(?:live|be\s+alive|exist)|wish\s+i\s+(?:was\s+dead|were\s+dead|never\s+existed)|no\s+reason\s+to\s+live|better\s+off\s+(?:dead|without\s+me))\b/i, why: 'Suicidal ideation phrase' },
+  { re: /\b(self\s*-?\s*harm|cut\s+myself|cutting\s+myself|hurt\s+myself|harm\s+myself)\b/i, why: 'Self-harm phrase' },
+  { re: /\bsuicid(?:e|al)\b/i, why: 'Mention of suicide' },
+  // hopelessness / worthlessness
+  { re: /\b(?:i\s+)?(?:hate\s+myself|i'?m\s+worthless|i'?m\s+a\s+failure|i'?m\s+nothing|no\s+one\s+(?:cares|would\s+miss\s+me)|nobody\s+loves\s+me|hate\s+my\s+life)\b/i, why: 'Hopelessness/worthlessness phrase' },
+  // abuse signals
+  { re: /\b(being\s+abused|someone\s+(?:is\s+)?hurting\s+me|hit\s+me\s+at\s+home|scared\s+to\s+go\s+home|don'?t\s+feel\s+safe\s+at\s+home)\b/i, why: 'Possible abuse signal' },
+];
+
+function keywordDistressMatch_(body) {
+  const text = String(body || '');
+  if (!text) return null;
+  for (const k of DISTRESS_KEYWORDS) {
+    if (k.re.test(text)) return k.why;
+  }
+  return null;
+}
+
 // Lightweight distress-only classifier (yes/no + reason). Much faster than
 // the full feedback classifier — used wherever we want safety triage without
 // also generating teacher-readable feedback.
 function classifyDistress_(body) {
+  // Layer 1: keyword net. Always runs, no API dependency. Catches obvious
+  // phrases even if the Gemini key is missing or the API is down.
+  const keywordWhy = keywordDistressMatch_(body);
+  if (keywordWhy) {
+    return { distress_detected: true, distress_reason: 'Keyword match: ' + keywordWhy };
+  }
+
+  // Layer 2: Gemini classifier. Catches subtler / paraphrased signals the
+  // keyword net misses. Falls through cleanly if the API isn't available.
   const text = String(body || '').trim();
   if (!text) return { distress_detected: false, distress_reason: '' };
 
@@ -1761,13 +1818,16 @@ function classifyAndMaybeFlag_(claims, body, source, context) {
 
 function sendInteractionAlert_(claims, source, body, reason, context) {
   const props = PropertiesService.getScriptProperties();
-  const alertEmail = props.getProperty('ALERT_EMAIL') || '';
-  const teachers = (props.getProperty('TEACHER_EMAILS') || '').split(',').map(s => s.trim()).filter(Boolean);
-  const recipient = alertEmail || teachers[0];
-  if (!recipient) {
-    Logger.log('No alert recipient configured for interaction flag');
-    return;
-  }
+  const adminEmail = String(props.getProperty('ALERT_EMAIL') || '').toLowerCase();
+  const teachers = (props.getProperty('TEACHER_EMAILS') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const assignedTeacher = String(getAssignedTeacher_(claims.email) || '').toLowerCase();
+
+  // Primary: assigned teacher → ALERT_EMAIL → first teacher on the allow-list.
+  const to = assignedTeacher || adminEmail || teachers[0];
+  if (!to) { Logger.log('No alert recipient configured for interaction flag'); return; }
+  const ccSet = {};
+  if (adminEmail && adminEmail !== to) ccSet[adminEmail] = true;
+  const cc = Object.keys(ccSet).join(',');
 
   const sourceLabel = {
     note: 'private note',
@@ -1776,19 +1836,23 @@ function sendInteractionAlert_(claims, source, body, reason, context) {
 
   const studentLabel = (claims.name || claims.email) + ' <' + claims.email + '>';
   const sheetUrl = getSheetUrl_();
-  const subject = '[AISA Hub] Flagged ' + sourceLabel + ' — ' + (claims.name || claims.email);
+  const subject = '🚨 URGENT — flagged ' + sourceLabel + ' · ' + (claims.name || claims.email);
   const emailBody =
-    'A student\'s ' + sourceLabel + ' was flagged for review.\n\n' +
+    'URGENT: a student\'s ' + sourceLabel + ' was flagged for distress signals and needs review TODAY.\n\n' +
     'Student: ' + studentLabel + '\n' +
     'Time: ' + new Date().toLocaleString() + '\n\n' +
     'Why flagged: ' + (reason || 'Detected distress signals') + '\n\n' +
     'Content:\n' + body + '\n\n' +
     (context ? 'Context:\n' + context + '\n\n' : '') +
     (sheetUrl ? 'Sheet: ' + sheetUrl + '\n\n' : '') +
-    'You can review and resolve this in the Flagged panel of Teacher Studio. ' +
-    'The student\'s content above is logged in the FlaggedInteractions tab.';
+    'Please follow up with the student in person today. The content above is ' +
+    'logged in the FlaggedInteractions tab and visible in Teacher Studio\'s ' +
+    'Flagged panel.\n\n' +
+    'Sent automatically by the AISA Student Hub.';
 
-  MailApp.sendEmail({ to: recipient, subject: subject, body: emailBody });
+  const options = { to: to, subject: subject, body: emailBody };
+  if (cc) options.cc = cc;
+  MailApp.sendEmail(options);
 }
 
 function classifyNote_(claims, body) {
@@ -1957,36 +2021,52 @@ function suggestPrompt_(topic, type) {
 
 function sendDistressAlert_(prompt, claims, responseBody, flagReason) {
   const props = PropertiesService.getScriptProperties();
-  const teacherEmail = prompt.teacher_email;
-  const adminEmail = props.getProperty('ALERT_EMAIL') || '';
+  const promptTeacher = String(prompt.teacher_email || '').toLowerCase();
+  const adminEmail = String(props.getProperty('ALERT_EMAIL') || '').toLowerCase();
+  const assignedTeacher = String(getAssignedTeacher_(claims.email) || '').toLowerCase();
 
-  if (!teacherEmail && !adminEmail) {
-    Logger.log('No alert recipient configured');
-    return;
-  }
+  // Primary = assigned teacher (preferred — they know the student best),
+  // then prompt's teacher, then ALERT_EMAIL. Everyone else relevant gets CC'd.
+  const to = assignedTeacher || promptTeacher || adminEmail;
+  if (!to) { Logger.log('No alert recipient configured'); return; }
+  const ccSet = {};
+  [promptTeacher, adminEmail].forEach(e => { if (e && e !== to) ccSet[e] = true; });
+  const cc = Object.keys(ccSet).join(',');
 
   const sheetUrl = getSheetUrl_();
-  const subject = '[AISA Student Hub] Student response flagged for review';
+  const subject = '🚨 URGENT — flagged student response · ' + (claims.name || claims.email);
   const body =
-    'A student response was flagged for possible distress signals and may need follow-up.\n\n' +
+    'URGENT: a student response was flagged for possible distress signals and needs review TODAY.\n\n' +
     'Student: ' + (claims.name || '') + ' <' + claims.email + '>\n' +
-    'Prompt: ' + (prompt.title || '(untitled)') + '\n\n' +
+    'Prompt: ' + (prompt.title || '(untitled)') + '\n' +
+    'Submitted: ' + new Date().toLocaleString() + '\n\n' +
     'Why flagged: ' + (flagReason || 'Detected distress signals') + '\n\n' +
     'Prompt body:\n' + (prompt.body || '') + '\n\n' +
     'Student response:\n' + responseBody + '\n\n' +
     (sheetUrl ? 'Sheet: ' + sheetUrl + '\n\n' : '') +
     'The student saw a supportive resource message instead of AI feedback. ' +
-    'This email was sent automatically by the AISA Student Hub.';
+    'Please follow up with them in person today.\n\n' +
+    'Sent automatically by the AISA Student Hub.';
 
-  const options = { subject: subject, body: body };
-  options.to = teacherEmail || adminEmail;
-  if (adminEmail && teacherEmail && adminEmail.toLowerCase() !== teacherEmail.toLowerCase()) {
-    options.cc = adminEmail;
-  }
+  const options = { to: to, subject: subject, body: body };
+  if (cc) options.cc = cc;
   MailApp.sendEmail(options);
 }
 
 function getGeminiReview_(prompt, responseBody) {
+  // Layer 1: keyword distress check runs unconditionally. If it matches we
+  // can flag the response and skip Gemini entirely, which also means safety
+  // still works if the API key is missing.
+  const keywordReason = keywordDistressMatch_(responseBody);
+  if (keywordReason) {
+    return {
+      feedback: '',
+      distress_detected: true,
+      distress_reason: 'Keyword match: ' + keywordReason,
+      model: 'keyword_filter',
+    };
+  }
+  // Layer 2: full Gemini classifier (feedback + distress in one structured call).
   const props = PropertiesService.getScriptProperties();
   const apiKey = props.getProperty('GEMINI_API_KEY');
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
