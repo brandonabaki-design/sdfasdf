@@ -377,8 +377,15 @@ async function loadPrompts() {
       list.textContent = `Couldn't load prompts: ${friendlyError(data.error)}`;
       return;
     }
+    const tabCount = document.getElementById('tab-count-active');
+    if (tabCount) tabCount.textContent = String(data.prompts.length);
     if (data.prompts.length === 0) {
-      list.innerHTML = '<p class="muted">No active prompts yet.</p>';
+      list.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">📝</span>
+          <h3>No active prompts yet</h3>
+          <p>Use the form on the left to publish your first assignment.</p>
+        </div>`;
       return;
     }
     list.innerHTML = '';
@@ -386,8 +393,51 @@ async function loadPrompts() {
       list.appendChild(renderTeacherPromptCard(p));
     }
   } catch (err) {
-    list.textContent = `Network error: ${err.message}`;
+    list.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><h3>Network error</h3><p>${err.message}</p></div>`;
   }
+}
+
+function switchTeacherTab(name) {
+  document.querySelectorAll('.tab-nav .tab').forEach(tab => {
+    const active = tab.dataset.tab === name;
+    tab.classList.toggle('is-active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('.tab-panel').forEach(panel => {
+    panel.hidden = panel.id !== `panel-${name}`;
+  });
+}
+
+let teacherNotesTimer = null;
+function setupTeacherNotes() {
+  const textarea = document.getElementById('notes-textarea');
+  const status = document.getElementById('notes-status');
+  if (!textarea || !status) return;
+  document.addEventListener('aisa:signed-in', () => {
+    try {
+      const key = 'aisa.notes.' + (currentUser && currentUser.email ? currentUser.email : 'anon');
+      const saved = localStorage.getItem(key);
+      if (saved != null) {
+        textarea.value = saved;
+        status.textContent = 'Saved on this device.';
+      } else {
+        status.textContent = 'Start typing — your notes save automatically.';
+      }
+    } catch (_) {}
+  });
+  textarea.addEventListener('input', () => {
+    status.textContent = 'Saving…';
+    if (teacherNotesTimer) clearTimeout(teacherNotesTimer);
+    teacherNotesTimer = setTimeout(() => {
+      try {
+        const key = 'aisa.notes.' + (currentUser && currentUser.email ? currentUser.email : 'anon');
+        localStorage.setItem(key, textarea.value);
+        status.textContent = 'Saved on this device · ' + friendlyTime(new Date().toISOString());
+      } catch (err) {
+        status.textContent = "Couldn't save (storage full?)";
+      }
+    }, 400);
+  });
 }
 
 function renderTeacherPromptCard(p) {
@@ -974,20 +1024,27 @@ async function loadDrafts() {
   const section = document.getElementById('drafts-section');
   const list = document.getElementById('drafts-list');
   const count = document.getElementById('drafts-count');
+  const empty = document.getElementById('drafts-empty');
+  const tabCount = document.getElementById('tab-count-drafts');
   try {
     const data = await api('list_drafts');
-    if (!data.ok || !data.drafts || data.drafts.length === 0) {
-      section.hidden = true;
+    const drafts = (data.ok && data.drafts) ? data.drafts : [];
+    if (tabCount) tabCount.textContent = String(drafts.length);
+    if (drafts.length === 0) {
+      if (section) section.hidden = true;
+      if (empty) empty.hidden = false;
       return;
     }
+    if (empty) empty.hidden = true;
     section.hidden = false;
-    count.textContent = `${data.drafts.length} draft${data.drafts.length === 1 ? '' : 's'}`;
+    count.textContent = `${drafts.length} draft${drafts.length === 1 ? '' : 's'}`;
     list.innerHTML = '';
-    for (const d of data.drafts) {
+    for (const d of drafts) {
       list.appendChild(renderDraftCard(d));
     }
   } catch (err) {
-    section.hidden = true;
+    if (section) section.hidden = true;
+    if (empty) empty.hidden = false;
   }
 }
 
@@ -1291,6 +1348,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('prompt-type').addEventListener('change', (e) => applyFormTypeUI(e.target.value));
   applyFormTypeUI('open');
   renderTemplatesRow();
+
+  // Tabs
+  document.querySelectorAll('.tab-nav .tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTeacherTab(tab.dataset.tab));
+  });
+  setupTeacherNotes();
 
   document.getElementById('suggest-ai-btn').addEventListener('click', openSuggestModal);
   document.getElementById('suggest-close').addEventListener('click', closeSuggestModal);

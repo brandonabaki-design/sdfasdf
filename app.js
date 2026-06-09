@@ -111,32 +111,63 @@ function showSignedOut() {
 }
 
 async function loadPrompts() {
-  const list = document.getElementById('prompts-list');
-  list.textContent = 'Loading prompts...';
+  const todoList = document.getElementById('prompts-list');
+  const workList = document.getElementById('work-list');
+  todoList.innerHTML = '<div class="skeleton-stack"><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div></div>';
   try {
     const [promptsData, responsesData] = await Promise.all([
       api('list_prompts'),
       api('list_my_responses'),
     ]);
     if (!promptsData.ok) {
-      list.textContent = `Couldn't load prompts: ${promptsData.error}`;
+      todoList.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><h3>Couldn't load</h3><p>${friendlyError(promptsData.error)}</p></div>`;
       return;
     }
     allResponses = responsesData.ok ? responsesData.responses : [];
     allPrompts = promptsData.prompts;
     updateAssignmentsBadge(allPrompts);
-
-    if (promptsData.prompts.length === 0) {
-      list.innerHTML = '<p class="muted">No active prompts yet. Check back later.</p>';
-      return;
-    }
-
-    list.innerHTML = '';
-    for (const p of promptsData.prompts) {
-      list.appendChild(renderPromptCard(p));
-    }
+    renderPromptTabs();
   } catch (err) {
-    list.textContent = `Network error: ${err.message}`;
+    todoList.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><h3>Network error</h3><p>${err.message}</p></div>`;
+  }
+}
+
+function renderPromptTabs() {
+  const todo = allPrompts.filter(p => !p.completed);
+  const work = allPrompts.filter(p => p.completed);
+
+  // Update counts
+  const todoCount = document.getElementById('tab-count-todo');
+  const workCount = document.getElementById('tab-count-work');
+  if (todoCount) todoCount.textContent = String(todo.length);
+  if (workCount) workCount.textContent = String(work.length);
+
+  // To Do panel
+  const todoList = document.getElementById('prompts-list');
+  todoList.innerHTML = '';
+  if (todo.length === 0) {
+    todoList.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">🎉</span>
+        <h3>All caught up</h3>
+        <p>You don't have any pending assignments right now. Nice work.</p>
+      </div>`;
+  } else {
+    for (const p of todo) todoList.appendChild(renderPromptCard(p));
+  }
+
+  // My Work panel
+  const workList = document.getElementById('work-list');
+  workList.innerHTML = '';
+  if (work.length === 0) {
+    workList.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">📁</span>
+        <h3>Nothing here yet</h3>
+        <p>Completed assignments will show up here along with the AI feedback you received.</p>
+      </div>`;
+  } else {
+    for (const p of work) workList.appendChild(renderPromptCard(p));
   }
 }
 
@@ -725,6 +756,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('checkout-modal-backdrop').addEventListener('click', closeCheckoutModal);
   document.getElementById('checkout-modal-submit').addEventListener('click', submitCheckout);
 
+  // Tab switching
+  document.querySelectorAll('.tab-nav .tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+
+  // Notes — load saved + autosave on input
+  setupNotes();
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeAssignmentsPanel();
@@ -732,6 +771,55 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-nav .tab').forEach(tab => {
+    const active = tab.dataset.tab === name;
+    tab.classList.toggle('is-active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('.tab-panel').forEach(panel => {
+    panel.hidden = panel.id !== `panel-${name}`;
+  });
+}
+
+function notesStorageKey() {
+  const email = currentUser && currentUser.email ? currentUser.email : 'anon';
+  return 'aisa.notes.' + email;
+}
+
+let notesSaveTimer = null;
+function setupNotes() {
+  const textarea = document.getElementById('notes-textarea');
+  const status = document.getElementById('notes-status');
+  if (!textarea || !status) return;
+
+  // Load saved notes once the user is signed in (so we can key by email).
+  document.addEventListener('aisa:signed-in', () => {
+    try {
+      const saved = localStorage.getItem(notesStorageKey());
+      if (saved != null) {
+        textarea.value = saved;
+        status.textContent = 'Saved on this device.';
+      } else {
+        status.textContent = 'Start typing — your notes save automatically.';
+      }
+    } catch (_) {}
+  });
+
+  textarea.addEventListener('input', () => {
+    status.textContent = 'Saving…';
+    if (notesSaveTimer) clearTimeout(notesSaveTimer);
+    notesSaveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(notesStorageKey(), textarea.value);
+        status.textContent = 'Saved on this device · ' + friendlyTime(new Date().toISOString());
+      } catch (err) {
+        status.textContent = "Couldn't save (storage full?)";
+      }
+    }, 400);
+  });
+}
 
 document.addEventListener('aisa:signed-in', (e) => showSignedIn(e.detail));
 document.addEventListener('aisa:signed-out', showSignedOut);

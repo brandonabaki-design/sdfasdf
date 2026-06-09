@@ -230,20 +230,54 @@
           </div>
 
           <div class="panel">
-            <header class="panel-header">
-              <h2 class="panel-title font-heading">Your prompts</h2>
-              <p class="panel-subtitle">Drafts shared with you appear first, then your active prompts.</p>
-            </header>
+            <nav class="tab-nav" role="tablist" aria-label="Prompt categories">
+              <button class="tab is-active" data-tab="active" role="tab" id="tab-active" aria-selected="true">
+                <span class="tab-icon" aria-hidden="true">📌</span>
+                <span class="tab-label">Active</span>
+                <span class="tab-count" id="tab-count-active">0</span>
+              </button>
+              <button class="tab" data-tab="drafts" role="tab" id="tab-drafts" aria-selected="false">
+                <span class="tab-icon" aria-hidden="true">📨</span>
+                <span class="tab-label">Drafts</span>
+                <span class="tab-count" id="tab-count-drafts">0</span>
+              </button>
+              <button class="tab" data-tab="notes" role="tab" id="tab-notes" aria-selected="false">
+                <span class="tab-icon" aria-hidden="true">📓</span>
+                <span class="tab-label">Notes</span>
+              </button>
+            </nav>
 
-            <section id="drafts-section" class="drafts-section" hidden>
-              <h3 class="drafts-title font-heading">
-                <span class="drafts-badge">📨 Shared with you</span>
-                <span id="drafts-count" class="muted small"></span>
-              </h3>
-              <div id="drafts-list" class="drafts-list"></div>
+            <section id="panel-active" class="tab-panel" role="tabpanel" aria-labelledby="tab-active">
+              <p class="panel-subtitle" style="margin: 4px 0 18px;">Expand each prompt to read responses or generate an AI summary.</p>
+              <div id="prompts-list" class="prompts-grid"></div>
             </section>
 
-            <div id="prompts-list" class="prompts-grid"></div>
+            <section id="panel-drafts" class="tab-panel" role="tabpanel" aria-labelledby="tab-drafts" hidden>
+              <p class="panel-subtitle" style="margin: 4px 0 18px;">Drafts other teachers have shared with you. Customise and publish to your own students.</p>
+              <section id="drafts-section" class="drafts-section" hidden>
+                <h3 class="drafts-title font-heading">
+                  <span class="drafts-badge">📨 Shared with you</span>
+                  <span id="drafts-count" class="muted small"></span>
+                </h3>
+                <div id="drafts-list" class="drafts-list"></div>
+              </section>
+              <div id="drafts-empty" class="empty-state" hidden>
+                <span class="empty-icon">📭</span>
+                <h3>No drafts shared with you</h3>
+                <p>When another teacher shares a prompt with you, it'll appear here.</p>
+              </div>
+            </section>
+
+            <section id="panel-notes" class="tab-panel" role="tabpanel" aria-labelledby="tab-notes" hidden>
+              <div class="notes-card">
+                <header class="notes-header">
+                  <h3 class="font-heading">Your planning notes</h3>
+                  <p class="muted small">Lesson ideas, follow-ups, anything. Only you can see this. Autosaved on this device.</p>
+                </header>
+                <textarea id="notes-textarea" rows="14" placeholder="Tomorrow's lesson…&#10;Students to follow up with…&#10;Ideas for next week's prompt…"></textarea>
+                <p class="notes-status muted small" id="notes-status">Not saved yet.</p>
+              </div>
+            </section>
           </div>
         </div>
       </section>

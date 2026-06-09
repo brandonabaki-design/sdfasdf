@@ -3508,6 +3508,104 @@ body:not(.is-signed-in) #step-out-btn { display: none !important; }
 .data-table tr.row-clickable:hover a.row-link { color: var(--indigo); }
 
 /* ============================================================
+   Tabs (To Do / My Work / Notes — Active / Drafts / Notes)
+   ============================================================ */
+
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  margin-bottom: 22px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+  white-space: nowrap;
+  min-height: 40px;
+}
+.tab:hover { color: var(--text); background: rgba(99, 102, 241, 0.06); }
+.tab.is-active {
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+.tab.is-active .tab-icon { transform: scale(1.05); }
+.tab-icon {
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.18s;
+}
+.tab-label { font-weight: 600; }
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tab.is-active .tab-count {
+  background: var(--indigo);
+  color: white;
+}
+
+.tab-panel { animation: fade-up 0.25s ease backwards; }
+.tab-panel[hidden] { display: none; }
+
+/* Notes card */
+.notes-card { display: flex; flex-direction: column; gap: 14px; }
+.notes-header h3 { margin: 0 0 4px; font-size: 18px; }
+.notes-card textarea {
+  width: 100%;
+  padding: 18px 20px;
+  background: #fffef8;
+  border: 1px solid #fcd34d;
+  border-radius: 14px;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.7;
+  resize: vertical;
+  min-height: 280px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.notes-card textarea::placeholder { color: var(--text-dim); }
+.notes-card textarea:focus {
+  outline: none;
+  border-color: var(--gold-dark);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.16);
+}
+.notes-status { margin: 0; }
+
+@media (max-width: 640px) {
+  .tab { padding: 8px 12px; font-size: 14px; }
+  .tab-label { display: none; }
+  .tab.is-active .tab-label { display: inline; }
+}
+
+/* ============================================================
    Footer
    ============================================================ */
 

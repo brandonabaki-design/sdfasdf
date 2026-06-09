@@ -133,7 +133,41 @@
       <!-- Check out / check in (compact strip) -->
       <section id="checkout-card" class="checkout-strip" hidden></section>
 
-      <div id="prompts-list" class="prompts-grid"></div>
+      <nav class="tab-nav" role="tablist" aria-label="Assignment categories">
+        <button class="tab is-active" data-tab="todo" role="tab" id="tab-todo" aria-selected="true">
+          <span class="tab-icon" aria-hidden="true">📝</span>
+          <span class="tab-label">To Do</span>
+          <span class="tab-count" id="tab-count-todo">0</span>
+        </button>
+        <button class="tab" data-tab="work" role="tab" id="tab-work" aria-selected="false">
+          <span class="tab-icon" aria-hidden="true">✅</span>
+          <span class="tab-label">My Work</span>
+          <span class="tab-count" id="tab-count-work">0</span>
+        </button>
+        <button class="tab" data-tab="notes" role="tab" id="tab-notes" aria-selected="false">
+          <span class="tab-icon" aria-hidden="true">📓</span>
+          <span class="tab-label">Notes</span>
+        </button>
+      </nav>
+
+      <section id="panel-todo" class="tab-panel" role="tabpanel" aria-labelledby="tab-todo">
+        <div id="prompts-list" class="prompts-grid"></div>
+      </section>
+
+      <section id="panel-work" class="tab-panel" role="tabpanel" aria-labelledby="tab-work" hidden>
+        <div id="work-list" class="prompts-grid"></div>
+      </section>
+
+      <section id="panel-notes" class="tab-panel" role="tabpanel" aria-labelledby="tab-notes" hidden>
+        <div class="notes-card">
+          <header class="notes-header">
+            <h3 class="font-heading">Your notes</h3>
+            <p class="muted small">Jot down anything — only you can see this. Saved automatically on this device.</p>
+          </header>
+          <textarea id="notes-textarea" rows="14" placeholder="Today I learned…&#10;Questions to ask…&#10;Ideas for my next response…"></textarea>
+          <p class="notes-status muted small" id="notes-status">Not saved yet.</p>
+        </div>
+      </section>
     </section>
 
     <!-- Step-out modal (unified: picker + status) -->
