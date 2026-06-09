@@ -2178,6 +2178,40 @@ body:not(.is-signed-in) #step-out-btn { display: none !important; }
 
 .row-resolved.all-resolved { color: var(--emerald); font-weight: 800; }
 
+/* Overdue treatment for flags past the follow-up threshold */
+.flagged-item.is-overdue {
+  border-color: var(--rose);
+  background: linear-gradient(180deg, #fff1f2, var(--rose-soft));
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.10);
+}
+.flagged-overdue-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: var(--rose);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.flagged-btn.has-overdue {
+  background: rgba(225, 29, 72, 0.22);
+  border-color: rgba(225, 29, 72, 0.45);
+  color: #fecdd3;
+  animation: pulse-overdue-flag 2.2s ease-in-out infinite;
+}
+.flagged-btn.has-overdue .flagged-count {
+  background: var(--rose);
+  color: white;
+  box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.4);
+}
+@keyframes pulse-overdue-flag {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); }
+  50%      { box-shadow: 0 0 0 6px rgba(225, 29, 72, 0.18); }
+}
+
 .flagged-source-pill {
   display: inline-flex;
   align-items: center;

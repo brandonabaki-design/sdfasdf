@@ -912,12 +912,29 @@ async function refreshFlaggedCount() {
   } catch (err) { /* silent */ }
 }
 
+// Flags older than this (in hours) are surfaced as "awaiting follow-up" —
+// extra red treatment on the item, amber pulse on the topbar pill.
+const FLAG_FOLLOWUP_HOURS = 12;
+
+function isFlagOverdue(item) {
+  if (!item || !item.created_at) return false;
+  const ageMs = Date.now() - new Date(item.created_at).getTime();
+  return ageMs > FLAG_FOLLOWUP_HOURS * 60 * 60 * 1000;
+}
+
 function updateFlaggedButton(responses) {
   const btn = document.getElementById('flagged-btn');
   const count = document.getElementById('flagged-count');
   if (!btn || !count) return;
   count.textContent = String(responses.length);
   btn.classList.toggle('empty', responses.length === 0);
+  // Pulse the pill if any flag is past the follow-up threshold.
+  const overdueCount = responses.filter(isFlagOverdue).length;
+  btn.classList.toggle('has-overdue', overdueCount > 0);
+  btn.setAttribute('aria-label',
+    responses.length === 0 ? 'No flagged items' :
+    overdueCount > 0 ? `${responses.length} flagged, ${overdueCount} awaiting follow-up` :
+    `${responses.length} flagged items`);
 }
 
 function populateFlaggedPanel(responses) {
@@ -935,7 +952,10 @@ function populateFlaggedPanel(responses) {
     `;
     return;
   }
-  sub.textContent = `${responses.length} item${responses.length === 1 ? '' : 's'} need${responses.length === 1 ? 's' : ''} your attention.`;
+  const overdueCount = responses.filter(isFlagOverdue).length;
+  sub.textContent = overdueCount > 0
+    ? `${overdueCount} of ${responses.length} awaiting follow-up · oldest first.`
+    : `${responses.length} item${responses.length === 1 ? '' : 's'} need${responses.length === 1 ? 's' : ''} your attention.`;
   list.innerHTML = '';
   for (const r of responses) {
     list.appendChild(renderFlaggedItem(r));
@@ -944,7 +964,8 @@ function populateFlaggedPanel(responses) {
 
 function renderFlaggedItem(r) {
   const item = document.createElement('article');
-  item.className = 'flagged-item';
+  const overdue = isFlagOverdue(r);
+  item.className = 'flagged-item' + (overdue ? ' is-overdue' : '');
   item.dataset.id = r.id;
   const initials = (r.student_name || r.student_email || '?')
     .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
@@ -966,6 +987,7 @@ function renderFlaggedItem(r) {
   }
 
   item.innerHTML = `
+    ${overdue ? '<p class="flagged-overdue-banner">⏰ Awaiting follow-up — flagged ' + friendlyTime(r.created_at) + '</p>' : ''}
     <div class="flagged-item-head">
       <span class="flagged-avatar"></span>
       <div class="student-line">

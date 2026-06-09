@@ -64,8 +64,9 @@ const REVIEW_SYSTEM_PROMPT =
   "The student never sees distress_reason — it is only used to alert their teacher.";
 const DEFAULT_RESOURCE_MESSAGE =
   "Thanks for sharing — that took courage. Your teacher has been notified and " +
-  "will follow up with you. If you need to talk to someone right now, please reach " +
-  "out to your school counsellor or a trusted adult.";
+  "will check in with you within the next day or two. You don't have to wait — " +
+  "if you'd like to talk to someone right now, please reach out to your school " +
+  "counsellor or a trusted adult.";
 const SUMMARY_SYSTEM_PROMPT =
   "You are an educational consultant reading all student responses to a single " +
   "class prompt. Produce a concise, actionable summary for the teacher as a JSON " +
@@ -2409,7 +2410,9 @@ function listFlaggedResponses_(includeResolved) {
     }
   }
 
-  return items.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  // Triage order: oldest unresolved flag rises to the top so a forgotten
+  // flag never hides at the bottom.
+  return items.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
 }
 
 function resolveFlaggedResponse_(claims, payload) {
