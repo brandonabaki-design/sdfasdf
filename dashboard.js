@@ -20,8 +20,6 @@ async function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
   document.getElementById('signed-in').hidden = false;
-  document.getElementById('user-name').textContent = user.name || '';
-  document.getElementById('user-email').textContent = user.email || '';
   await loadDashboard();
 }
 
@@ -251,7 +249,7 @@ function renderActivity(items) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('sign-out').addEventListener('click', signOut);
+  // sign-out wired by menu.js
   document.getElementById('refresh-btn').addEventListener('click', loadDashboard);
 });
 

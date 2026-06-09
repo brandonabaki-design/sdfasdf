@@ -33,86 +33,7 @@
     <div class="bg-blob b3"></div>
   </div>
 
-  <nav class="topbar" aria-label="Primary">
-    <a href="index.html" class="brand">
-      <span class="brand-mark" aria-hidden="true">🦁</span>
-      <span class="brand-text">
-        <span class="brand-name">AISA</span>
-        <span class="brand-sub">Teacher Studio</span>
-      </span>
-    </a>
-
-    <div class="topbar-meta">
-      <a href="dashboard.html" class="btn btn-ghost" id="dashboard-link">📊 Dashboard</a>
-      <button id="checkouts-btn" class="checkouts-btn empty" type="button">
-        <span class="checkouts-icon">🚪</span>
-        <span>Out now</span>
-        <span class="checkouts-count" id="checkouts-count">0</span>
-      </button>
-      <button id="flagged-btn" class="flagged-btn empty" type="button">
-        <span class="flagged-icon">🚩</span>
-        <span>Flagged</span>
-        <span class="flagged-count" id="flagged-count">0</span>
-      </button>
-      <span id="user-chip" class="user-chip">
-        <span class="user-dot"></span>
-        <span id="user-name"></span>
-        <span class="muted">·</span>
-        <span id="user-email"></span>
-      </span>
-      <button id="sign-out" class="btn btn-ghost">Sign out</button>
-    </div>
-  </nav>
-
-  <!-- Out now (active check-outs) slide-in panel -->
-  <div id="checkouts-backdrop" class="checkouts-backdrop"></div>
-  <aside id="checkouts-panel" class="checkouts-panel" aria-hidden="true">
-    <header class="checkouts-panel-header">
-      <div>
-        <h2 class="font-heading">
-          <span class="panel-icon checkouts-panel-icon" aria-hidden="true">🚪</span>
-          Students out now
-        </h2>
-        <p class="panel-sub" id="checkouts-panel-sub">Loading...</p>
-      </div>
-      <button class="checkouts-close" id="checkouts-close" aria-label="Close panel">×</button>
-    </header>
-    <div class="checkouts-list" id="checkouts-list"></div>
-  </aside>
-
-  <!-- Flagged slide-in panel -->
-  <div id="flagged-backdrop" class="flagged-backdrop"></div>
-  <aside id="flagged-panel" class="flagged-panel" aria-hidden="true">
-    <header class="flagged-panel-header">
-      <div>
-        <h2 class="font-heading">
-          <span class="panel-icon" aria-hidden="true">🚩</span>
-          Flagged Responses
-        </h2>
-        <p class="panel-sub" id="flagged-panel-sub">No items currently flagged.</p>
-      </div>
-      <button class="flagged-close" id="flagged-close" aria-label="Close flagged panel">×</button>
-    </header>
-    <div class="flagged-tabs" role="tablist" aria-label="Flagged view">
-      <button type="button" class="flagged-tab is-active" data-flagged-view="open"
-              role="tab" aria-selected="true" id="flagged-tab-open">
-        <span>Open</span>
-        <span class="flagged-tab-count" id="flagged-tab-count-open">0</span>
-      </button>
-      <button type="button" class="flagged-tab" data-flagged-view="resolved"
-              role="tab" aria-selected="false" id="flagged-tab-resolved">
-        <span>Resolved</span>
-        <span class="flagged-tab-count" id="flagged-tab-count-resolved">0</span>
-      </button>
-    </div>
-    <div class="flagged-list" id="flagged-list">
-      <div class="flagged-empty">
-        <span class="empty-icon" aria-hidden="true">✅</span>
-        <h3 class="font-heading">All clear</h3>
-        <p>No student responses have been flagged for review.</p>
-      </div>
-    </div>
-  </aside>
+  <nav class="topbar" data-page="teacher"></nav>
 
   <main class="container container-wide" id="main">
     <section id="signin-container" class="hero">
@@ -369,6 +290,9 @@
 
   <script src="config.js"></script>
   <script src="auth.js"></script>
+  <script src="menu.js"></script>
+  <script src="checkouts-panel.js"></script>
+  <script src="flagged-panel.js"></script>
   <script src="teacher.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
 </body>

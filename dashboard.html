@@ -32,26 +32,7 @@
     <div class="bg-blob b3"></div>
   </div>
 
-  <nav class="topbar" aria-label="Primary">
-    <a href="index.html" class="brand">
-      <span class="brand-mark" aria-hidden="true">🦁</span>
-      <span class="brand-text">
-        <span class="brand-name">AISA</span>
-        <span class="brand-sub">Dashboard</span>
-      </span>
-    </a>
-
-    <div class="topbar-meta">
-      <a href="teacher.html" class="btn btn-ghost">← Teacher Studio</a>
-      <span id="user-chip" class="user-chip">
-        <span class="user-dot"></span>
-        <span id="user-name"></span>
-        <span class="muted">·</span>
-        <span id="user-email"></span>
-      </span>
-      <button id="sign-out" class="btn btn-ghost">Sign out</button>
-    </div>
-  </nav>
+  <nav class="topbar" data-page="dashboard"></nav>
 
   <main class="container container-wide" id="main">
     <section id="signin-container" class="hero">
@@ -180,6 +161,9 @@
 
   <script src="config.js"></script>
   <script src="auth.js"></script>
+  <script src="menu.js"></script>
+  <script src="checkouts-panel.js"></script>
+  <script src="flagged-panel.js"></script>
   <script src="dashboard.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
 </body>

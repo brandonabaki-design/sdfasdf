@@ -32,26 +32,7 @@
     <div class="bg-blob b3"></div>
   </div>
 
-  <nav class="topbar" aria-label="Primary">
-    <a href="index.html" class="brand">
-      <span class="brand-mark" aria-hidden="true">🦁</span>
-      <span class="brand-text">
-        <span class="brand-name">AISA</span>
-        <span class="brand-sub">Student Profile</span>
-      </span>
-    </a>
-
-    <div class="topbar-meta">
-      <a href="dashboard.html" class="btn btn-ghost">← Dashboard</a>
-      <a href="teacher.html" class="btn btn-ghost">Teacher Studio</a>
-      <button id="refresh-profile-btn" class="btn btn-ghost" type="button" hidden title="Re-fetch the latest data for this student">↻ Refresh</button>
-      <span id="user-chip" class="user-chip">
-        <span class="user-dot"></span>
-        <span id="user-name"></span>
-      </span>
-      <button id="sign-out" class="btn btn-ghost">Sign out</button>
-    </div>
-  </nav>
+  <nav class="topbar" data-page="student"></nav>
 
   <main class="container container-wide" id="main">
     <section id="signin-container" class="hero">
@@ -174,6 +155,9 @@
 
   <script src="config.js"></script>
   <script src="auth.js"></script>
+  <script src="menu.js"></script>
+  <script src="checkouts-panel.js"></script>
+  <script src="flagged-panel.js"></script>
   <script src="student.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
 </body>

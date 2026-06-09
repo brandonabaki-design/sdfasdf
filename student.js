@@ -19,7 +19,6 @@ async function showSignedIn(user) {
   document.getElementById('signin-container').hidden = true;
   document.getElementById('status').hidden = true;
   document.getElementById('signed-in').hidden = false;
-  document.getElementById('user-name').textContent = user.name || '';
   await loadProfile();
 }
 
@@ -80,8 +79,17 @@ async function loadProfile(opts) {
 }
 
 function revealRefreshButton() {
-  const btn = document.getElementById('refresh-profile-btn');
-  if (btn) btn.hidden = false;
+  const slot = typeof menuPageActions === 'function' ? menuPageActions() : null;
+  if (!slot) return;
+  if (document.getElementById('refresh-profile-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'refresh-profile-btn';
+  btn.type = 'button';
+  btn.className = 'btn btn-ghost';
+  btn.title = 'Re-fetch the latest data for this student';
+  btn.textContent = '↻ Refresh';
+  btn.addEventListener('click', refreshProfile);
+  slot.appendChild(btn);
 }
 
 async function refreshProfile() {
@@ -480,10 +488,8 @@ function fillUl(ul, items) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('sign-out').addEventListener('click', signOut);
+  // sign-out wired by menu.js; refresh button created on first successful load.
   document.getElementById('generate-summary-btn').addEventListener('click', generateSummary);
-  const refreshBtn = document.getElementById('refresh-profile-btn');
-  if (refreshBtn) refreshBtn.addEventListener('click', refreshProfile);
 });
 
 document.addEventListener('aisa:signed-in', (e) => showSignedIn(e.detail));

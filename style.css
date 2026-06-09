@@ -393,6 +393,42 @@ body::before {
 
 .topbar-meta { display: flex; align-items: center; gap: 12px; }
 
+/* Shared teacher-area nav links (rendered by menu.js) */
+.menu-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+}
+.menu-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 0.15s, background 0.15s;
+}
+.menu-link:hover,
+.menu-link:focus-visible {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.10);
+  outline: none;
+}
+.menu-link.is-current {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+}
+.menu-link-icon { font-size: 16px; }
+.menu-page-actions { display: inline-flex; align-items: center; gap: 8px; }
+@media (max-width: 720px) {
+  .menu-links { display: none; }
+}
+
 .user-chip {
   display: inline-flex;
   align-items: center;
