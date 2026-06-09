@@ -253,16 +253,58 @@
         <div id="work-list" class="prompts-grid"></div>
       </div>
 
-      <!-- Notes -->
+      <!-- Notebook -->
       <div id="view-notes" class="view" hidden>
         <header class="view-header">
           <button class="back-to-hub" type="button" data-back>← Back to Hub</button>
-          <h2 class="view-title font-heading">📓 Notes</h2>
-          <p class="view-sub">Your private notebook. Only you can see this; it saves automatically.</p>
+          <h2 class="view-title font-heading">📓 Notebook</h2>
+          <p class="view-sub">Your private notebook. Save multiple notes, tag by subject, download anytime. Saves automatically as you type.</p>
         </header>
-        <div class="notes-card">
-          <textarea id="notes-textarea" rows="18" placeholder="Today I learned…&#10;Questions to ask in class…&#10;Ideas for my next response…"></textarea>
-          <p class="notes-status muted small" id="notes-status">Not saved yet.</p>
+        <div class="notebook">
+          <aside class="notebook-sidebar" aria-label="Your notes">
+            <div class="notebook-sidebar-head">
+              <button id="note-new" type="button" class="btn btn-primary notebook-new">+ New note</button>
+              <button id="notes-download-all" type="button" class="btn btn-ghost notebook-download-all" title="Download all notes as Markdown">⤓ All</button>
+            </div>
+            <ul id="notes-list" class="notes-list" role="list"></ul>
+          </aside>
+          <section class="notebook-editor" aria-label="Editor">
+            <div id="note-empty" class="empty-state">
+              <span class="empty-icon">📓</span>
+              <h3>No note selected</h3>
+              <p>Pick a note on the left, or create a new one to start writing.</p>
+            </div>
+            <div id="note-editor" hidden>
+              <div class="note-editor-head">
+                <input id="note-title" type="text" maxlength="120" placeholder="Note title" class="note-title-input" />
+                <div class="note-editor-actions">
+                  <button id="note-download" type="button" class="btn btn-ghost" title="Download as Markdown">⤓ Download</button>
+                  <button id="note-delete" type="button" class="btn btn-ghost note-delete" title="Delete this note">Delete</button>
+                </div>
+              </div>
+              <label class="note-category-label">
+                Subject / unit
+                <input id="note-category" type="text" maxlength="80" placeholder="e.g. Biology · Photosynthesis" list="note-category-suggestions" />
+                <datalist id="note-category-suggestions">
+                  <option value="Math"></option>
+                  <option value="Science"></option>
+                  <option value="Biology"></option>
+                  <option value="Chemistry"></option>
+                  <option value="Physics"></option>
+                  <option value="English"></option>
+                  <option value="History"></option>
+                  <option value="Geography"></option>
+                  <option value="Arabic"></option>
+                  <option value="Islamic Studies"></option>
+                  <option value="Art"></option>
+                  <option value="P.E."></option>
+                  <option value="Computer Science"></option>
+                </datalist>
+              </label>
+              <textarea id="note-body" rows="20" placeholder="Start writing…"></textarea>
+              <p class="notes-status muted small" id="notes-status">Saved on this device.</p>
+            </div>
+          </section>
         </div>
       </div>
 

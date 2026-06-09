@@ -943,70 +943,249 @@ function switchView(name) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/* ============================================================
+   Notebook — multiple notes per user, categorised, downloadable
+   ============================================================ */
+
+let notebook = [];
+let activeNoteId = null;
+let notesSaveTimer = null;
+let notesClassifyTimer = null;
+const noteClassifiedSnapshots = {};
+
 function notesStorageKey() {
+  const email = currentUser && currentUser.email ? currentUser.email : 'anon';
+  return 'aisa.notebook.' + email;
+}
+function legacyNotesKey() {
   const email = currentUser && currentUser.email ? currentUser.email : 'anon';
   return 'aisa.notes.' + email;
 }
 
-let notesSaveTimer = null;
-let notesClassifyTimer = null;
-let lastClassifiedNoteSnapshot = '';
-function setupNotes() {
-  const textarea = document.getElementById('notes-textarea');
-  const status = document.getElementById('notes-status');
-  if (!textarea || !status) return;
-
-  // Load saved notes once the user is signed in (so we can key by email).
-  document.addEventListener('aisa:signed-in', () => {
+function loadNotebook() {
+  try {
+    const raw = localStorage.getItem(notesStorageKey());
+    notebook = raw ? JSON.parse(raw) : [];
+  } catch (_) { notebook = []; }
+  // One-time migration: pull the old single-note value into the new structure.
+  if (notebook.length === 0) {
     try {
-      const saved = localStorage.getItem(notesStorageKey());
-      if (saved != null) {
-        textarea.value = saved;
-        status.textContent = 'Saved on this device.';
-        lastClassifiedNoteSnapshot = saved;
-      } else {
-        status.textContent = 'Start typing — your notes save automatically.';
+      const legacy = localStorage.getItem(legacyNotesKey());
+      if (legacy && legacy.trim()) {
+        const now = new Date().toISOString();
+        notebook.push({
+          id: cryptoUuid(),
+          title: 'My notes',
+          body: legacy,
+          category: '',
+          created_at: now,
+          updated_at: now,
+        });
+        persistNotebook();
       }
     } catch (_) {}
+  }
+}
+
+function persistNotebook() {
+  try { localStorage.setItem(notesStorageKey(), JSON.stringify(notebook)); } catch (_) {}
+}
+
+function cryptoUuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'n-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function setupNotes() {
+  const newBtn = document.getElementById('note-new');
+  const downloadAllBtn = document.getElementById('notes-download-all');
+  const downloadBtn = document.getElementById('note-download');
+  const deleteBtn = document.getElementById('note-delete');
+  const titleInput = document.getElementById('note-title');
+  const categoryInput = document.getElementById('note-category');
+  const bodyTextarea = document.getElementById('note-body');
+  const status = document.getElementById('notes-status');
+  if (!newBtn || !titleInput || !bodyTextarea) return;
+
+  document.addEventListener('aisa:signed-in', () => {
+    loadNotebook();
+    activeNoteId = notebook.length ? notebook[0].id : null;
+    renderNotebookList();
+    renderActiveNote();
   });
 
-  textarea.addEventListener('input', () => {
+  newBtn.addEventListener('click', () => {
+    const now = new Date().toISOString();
+    const note = {
+      id: cryptoUuid(),
+      title: 'Untitled note',
+      body: '',
+      category: '',
+      created_at: now,
+      updated_at: now,
+    };
+    notebook.unshift(note);
+    activeNoteId = note.id;
+    persistNotebook();
+    renderNotebookList();
+    renderActiveNote();
+    titleInput.focus();
+    titleInput.select();
+  });
+
+  downloadAllBtn.addEventListener('click', () => downloadAllNotes());
+  downloadBtn.addEventListener('click', () => {
+    const note = currentNote();
+    if (note) downloadNote(note);
+  });
+  deleteBtn.addEventListener('click', () => {
+    const note = currentNote();
+    if (!note) return;
+    if (!confirm(`Delete "${note.title}"? This can't be undone.`)) return;
+    notebook = notebook.filter(n => n.id !== note.id);
+    activeNoteId = notebook.length ? notebook[0].id : null;
+    persistNotebook();
+    renderNotebookList();
+    renderActiveNote();
+  });
+
+  function onEditorInput() {
+    const note = currentNote();
+    if (!note) return;
+    note.title = titleInput.value.trim() || 'Untitled note';
+    note.category = categoryInput.value.trim();
+    note.body = bodyTextarea.value;
+    note.updated_at = new Date().toISOString();
     status.textContent = 'Saving…';
     if (notesSaveTimer) clearTimeout(notesSaveTimer);
     notesSaveTimer = setTimeout(() => {
-      try {
-        localStorage.setItem(notesStorageKey(), textarea.value);
-        status.textContent = 'Saved on this device · ' + friendlyTime(new Date().toISOString());
-      } catch (err) {
-        status.textContent = "Couldn't save (storage full?)";
-      }
+      persistNotebook();
+      renderNotebookList();
+      status.textContent = 'Saved on this device · ' + friendlyTime(new Date().toISOString());
     }, 400);
-
-    // Separately, debounce a safety classification — fire-and-forget.
-    // The server only stores the note's body if it's flagged; otherwise
-    // nothing is logged. Privacy preserved while still catching distress.
+    // Safety classification: debounce 3s, fire-and-forget. The server only
+    // stores body content if a flag is raised — clean content is never sent.
     if (notesClassifyTimer) clearTimeout(notesClassifyTimer);
-    notesClassifyTimer = setTimeout(() => maybeClassifyNote(textarea.value), 3000);
-  });
+    notesClassifyTimer = setTimeout(() => maybeClassifyNote(note), 3000);
+  }
+  titleInput.addEventListener('input', onEditorInput);
+  categoryInput.addEventListener('input', onEditorInput);
+  bodyTextarea.addEventListener('input', onEditorInput);
 
-  // Also classify when the user navigates away from the notes view or
-  // closes the tab — catches edits that might never have triggered the
-  // 3-second debounce.
+  // Also classify when navigating away or closing the tab.
   document.querySelectorAll('[data-back]').forEach(el => {
-    el.addEventListener('click', () => maybeClassifyNote(textarea.value));
+    el.addEventListener('click', () => { const note = currentNote(); if (note) maybeClassifyNote(note); });
   });
-  window.addEventListener('beforeunload', () => maybeClassifyNote(textarea.value));
+  window.addEventListener('beforeunload', () => { const note = currentNote(); if (note) maybeClassifyNote(note); });
 }
 
-async function maybeClassifyNote(body) {
-  const text = String(body || '').trim();
+function currentNote() {
+  return notebook.find(n => n.id === activeNoteId) || null;
+}
+
+function renderNotebookList() {
+  const list = document.getElementById('notes-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (notebook.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'notes-list-empty muted small';
+    li.textContent = 'No notes yet. Tap "+ New note" to start one.';
+    list.appendChild(li);
+    return;
+  }
+  // Sort by updated_at desc
+  const sorted = notebook.slice().sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+  for (const note of sorted) {
+    const li = document.createElement('li');
+    li.className = 'note-row' + (note.id === activeNoteId ? ' is-active' : '');
+    li.innerHTML = `
+      <button class="note-row-btn" type="button">
+        <span class="note-row-title"></span>
+        <span class="note-row-meta">
+          <span class="note-row-category"></span>
+          <span class="note-row-time muted small"></span>
+        </span>
+      </button>
+    `;
+    li.querySelector('.note-row-title').textContent = note.title || 'Untitled note';
+    li.querySelector('.note-row-category').textContent = note.category || '';
+    li.querySelector('.note-row-time').textContent = friendlyTime(note.updated_at);
+    li.querySelector('.note-row-btn').addEventListener('click', () => {
+      activeNoteId = note.id;
+      renderNotebookList();
+      renderActiveNote();
+    });
+    list.appendChild(li);
+  }
+}
+
+function renderActiveNote() {
+  const empty = document.getElementById('note-empty');
+  const editor = document.getElementById('note-editor');
+  const note = currentNote();
+  if (!note) {
+    empty.hidden = false;
+    editor.hidden = true;
+    return;
+  }
+  empty.hidden = true;
+  editor.hidden = false;
+  document.getElementById('note-title').value = note.title || '';
+  document.getElementById('note-category').value = note.category || '';
+  document.getElementById('note-body').value = note.body || '';
+  const status = document.getElementById('notes-status');
+  if (status) status.textContent = 'Saved on this device · ' + friendlyTime(note.updated_at);
+}
+
+async function maybeClassifyNote(note) {
+  if (!note) return;
+  const text = String(note.body || '').trim();
   if (!text) return;
-  // Skip if nothing materially changed since last classification.
-  if (text === lastClassifiedNoteSnapshot) return;
-  lastClassifiedNoteSnapshot = text;
+  if (noteClassifiedSnapshots[note.id] === text) return;
+  noteClassifiedSnapshots[note.id] = text;
   try {
     await api('classify_note', { body: text });
   } catch (_) { /* silent — safety call shouldn't disturb the student */ }
+}
+
+function noteToMarkdown(note) {
+  const lines = [];
+  lines.push('# ' + (note.title || 'Untitled note'));
+  if (note.category) lines.push('', '> Subject / unit: ' + note.category);
+  lines.push('', '_Last updated: ' + new Date(note.updated_at).toLocaleString() + '_', '');
+  lines.push(note.body || '');
+  return lines.join('\n');
+}
+
+function sanitiseFilename(s) {
+  return String(s || 'note').replace(/[^a-z0-9-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'note';
+}
+
+function downloadBlob(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadNote(note) {
+  const md = noteToMarkdown(note);
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadBlob(md, `note-${sanitiseFilename(note.title)}-${stamp}.md`, 'text/markdown;charset=utf-8');
+}
+
+function downloadAllNotes() {
+  if (notebook.length === 0) { alert("You don't have any notes to download yet."); return; }
+  const parts = notebook.map(note => noteToMarkdown(note));
+  const combined = parts.join('\n\n---\n\n');
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadBlob(combined, `aisa-notebook-${stamp}.md`, 'text/markdown;charset=utf-8');
 }
 
 /* ============================================================

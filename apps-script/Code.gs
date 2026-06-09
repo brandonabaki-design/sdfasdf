@@ -1788,6 +1788,63 @@ function classifyDistress_(body) {
 // Classify a piece of student text from a non-prompt source (notes or study
 // chats). If flagged, log to FlaggedInteractions and email a teacher. Returns
 // true if flagged, false otherwise.
+// Count how many flag rows we've stored for one student over the last N days.
+// Looks across both the Responses sheet and FlaggedInteractions. Used to drive
+// the "escalation" CC to a safeguarding lead.
+function countRecentFlagsForStudent_(studentEmail, googleSub, withinDays) {
+  const email = String(studentEmail || '').toLowerCase();
+  const sub = String(googleSub || '');
+  const sinceMs = Date.now() - withinDays * 24 * 60 * 60 * 1000;
+  let count = 0;
+
+  const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const respLast = respSheet.getLastRow();
+  if (respLast >= 2) {
+    const values = respSheet.getRange(2, 1, respLast - 1, RESPONSES_HEADERS.length).getValues();
+    for (const r of values) {
+      const flagged = r[11] === true || String(r[11]).toLowerCase() === 'true';
+      if (!flagged) continue;
+      const matches = (sub && r[4] === sub) || (email && String(r[2] || '').toLowerCase() === email);
+      if (!matches) continue;
+      const ts = r[1] instanceof Date ? r[1].getTime() : new Date(r[1]).getTime();
+      if (ts >= sinceMs) count++;
+    }
+  }
+
+  const intSheet = getOrCreateSheet_(FLAGGED_INTERACTIONS_SHEET, FLAGGED_INTERACTIONS_HEADERS);
+  const intLast = intSheet.getLastRow();
+  if (intLast >= 2) {
+    const values = intSheet.getRange(2, 1, intLast - 1, FLAGGED_INTERACTIONS_HEADERS.length).getValues();
+    for (const r of values) {
+      const matches = (sub && r[4] === sub) || (email && String(r[2] || '').toLowerCase() === email);
+      if (!matches) continue;
+      const ts = r[1] instanceof Date ? r[1].getTime() : new Date(r[1]).getTime();
+      if (ts >= sinceMs) count++;
+    }
+  }
+  return count;
+}
+
+// Returns { ccEmail, note } for the safeguarding escalation, or null if the
+// threshold isn't met or the safeguarding lead isn't configured.
+function maybeEscalate_(claims) {
+  const props = PropertiesService.getScriptProperties();
+  const safeguarding = String(props.getProperty('SAFEGUARDING_EMAIL') || '').toLowerCase();
+  if (!safeguarding) return null;
+  const threshold = parseInt(props.getProperty('ESCALATION_THRESHOLD'), 10) || 2;
+  const windowDays = parseInt(props.getProperty('ESCALATION_WINDOW_DAYS'), 10) || 7;
+  // Note: at the time of this call the current flag has already been written
+  // to the sheet, so the count includes it. We escalate when count >= threshold.
+  const count = countRecentFlagsForStudent_(claims.email, claims.sub, windowDays);
+  if (count < threshold) return null;
+  return {
+    ccEmail: safeguarding,
+    note: '⚠️ Escalation: this student has been flagged ' + count +
+          ' time' + (count === 1 ? '' : 's') + ' in the past ' + windowDays + ' days. ' +
+          'Safeguarding lead has been CC\'d on this email.',
+  };
+}
+
 function classifyAndMaybeFlag_(claims, body, source, context) {
   if (!body || !String(body).trim()) return false;
   const result = classifyDistress_(body);
@@ -1827,6 +1884,8 @@ function sendInteractionAlert_(claims, source, body, reason, context) {
   if (!to) { Logger.log('No alert recipient configured for interaction flag'); return; }
   const ccSet = {};
   if (adminEmail && adminEmail !== to) ccSet[adminEmail] = true;
+  const escalation = maybeEscalate_(claims);
+  if (escalation && escalation.ccEmail && escalation.ccEmail !== to) ccSet[escalation.ccEmail] = true;
   const cc = Object.keys(ccSet).join(',');
 
   const sourceLabel = {
@@ -1836,9 +1895,11 @@ function sendInteractionAlert_(claims, source, body, reason, context) {
 
   const studentLabel = (claims.name || claims.email) + ' <' + claims.email + '>';
   const sheetUrl = getSheetUrl_();
-  const subject = '🚨 URGENT — flagged ' + sourceLabel + ' · ' + (claims.name || claims.email);
+  const subject = (escalation ? '🚨 URGENT · ESCALATED — ' : '🚨 URGENT — ') +
+                  'flagged ' + sourceLabel + ' · ' + (claims.name || claims.email);
   const emailBody =
     'URGENT: a student\'s ' + sourceLabel + ' was flagged for distress signals and needs review TODAY.\n\n' +
+    (escalation ? escalation.note + '\n\n' : '') +
     'Student: ' + studentLabel + '\n' +
     'Time: ' + new Date().toLocaleString() + '\n\n' +
     'Why flagged: ' + (reason || 'Detected distress signals') + '\n\n' +
@@ -2031,12 +2092,16 @@ function sendDistressAlert_(prompt, claims, responseBody, flagReason) {
   if (!to) { Logger.log('No alert recipient configured'); return; }
   const ccSet = {};
   [promptTeacher, adminEmail].forEach(e => { if (e && e !== to) ccSet[e] = true; });
+  const escalation = maybeEscalate_(claims);
+  if (escalation && escalation.ccEmail && escalation.ccEmail !== to) ccSet[escalation.ccEmail] = true;
   const cc = Object.keys(ccSet).join(',');
 
   const sheetUrl = getSheetUrl_();
-  const subject = '🚨 URGENT — flagged student response · ' + (claims.name || claims.email);
+  const subject = (escalation ? '🚨 URGENT · ESCALATED — ' : '🚨 URGENT — ') +
+                  'flagged student response · ' + (claims.name || claims.email);
   const body =
     'URGENT: a student response was flagged for possible distress signals and needs review TODAY.\n\n' +
+    (escalation ? escalation.note + '\n\n' : '') +
     'Student: ' + (claims.name || '') + ' <' + claims.email + '>\n' +
     'Prompt: ' + (prompt.title || '(untitled)') + '\n' +
     'Submitted: ' + new Date().toLocaleString() + '\n\n' +
