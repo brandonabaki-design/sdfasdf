@@ -2121,6 +2121,24 @@ body:not(.is-signed-in) #step-out-btn { display: none !important; }
 }
 .teacher-response-card .submission-time { font-size: 14px; color: var(--text-muted); }
 
+.flagged-source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.flagged-source-pill.tone-rose { background: var(--rose-soft); color: var(--rose); border: 1px solid #fca5a5; }
+.flagged-source-pill.tone-amber { background: var(--gold-soft); color: var(--gold-dark); border: 1px solid #fcd34d; }
+.flagged-source-pill.tone-violet { background: var(--violet-soft); color: var(--violet); border: 1px solid #d8b4fe; }
+
 .flag-banner {
   display: inline-block;
   background: rgba(244, 63, 94, 0.14);

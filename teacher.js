@@ -948,6 +948,23 @@ function renderFlaggedItem(r) {
   item.dataset.id = r.id;
   const initials = (r.student_name || r.student_email || '?')
     .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
+
+  const source = String(r.source || 'response').toLowerCase();
+  const sourceMeta = {
+    response: { label: 'Prompt response', emoji: '📝', tone: 'tone-rose' },
+    note: { label: 'Private note', emoji: '📓', tone: 'tone-amber' },
+    study_chat: { label: 'AI Study Buddy', emoji: '🤖', tone: 'tone-violet' },
+  }[source] || { label: 'Interaction', emoji: '⚠️', tone: 'tone-rose' };
+
+  let contextHtml = '';
+  if (source === 'response' && r.prompt_title) {
+    contextHtml = `<p class="prompt-context">On prompt: <strong></strong></p>`;
+  } else if (source === 'note') {
+    contextHtml = `<p class="prompt-context">A passage from this student's private notebook.</p>`;
+  } else if (source === 'study_chat') {
+    contextHtml = `<p class="prompt-context">From their chat with the AI Study Buddy.</p>`;
+  }
+
   item.innerHTML = `
     <div class="flagged-item-head">
       <span class="flagged-avatar"></span>
@@ -955,9 +972,14 @@ function renderFlaggedItem(r) {
         <p class="student-name"></p>
         <p class="student-email"></p>
       </div>
+      <span class="flagged-source-pill ${sourceMeta.tone}">
+        <span aria-hidden="true">${sourceMeta.emoji}</span>
+        <span>${sourceMeta.label}</span>
+      </span>
     </div>
-    <p class="prompt-context">On prompt: <strong></strong></p>
+    ${contextHtml}
     <p class="response-body"></p>
+    ${r.context ? '<p class="prompt-context"><strong>Nearby context:</strong> <span class="nearby-context"></span></p>' : ''}
     <div class="flag-reason">
       <span class="reason-label">Why:</span>
       <span class="reason-text"></span>
@@ -970,8 +992,11 @@ function renderFlaggedItem(r) {
   item.querySelector('.flagged-avatar').textContent = initials || '?';
   item.querySelector('.student-name').textContent = r.student_name || '(no name)';
   item.querySelector('.student-email').textContent = r.student_email || '';
-  item.querySelector('.prompt-context strong').textContent = r.prompt_title || '(untitled)';
+  const promptStrong = item.querySelector('.prompt-context strong');
+  if (promptStrong && source === 'response') promptStrong.textContent = r.prompt_title || '(untitled)';
   item.querySelector('.response-body').textContent = r.body || '';
+  const ctxEl = item.querySelector('.nearby-context');
+  if (ctxEl) ctxEl.textContent = String(r.context || '').slice(0, 400);
   item.querySelector('.reason-text').textContent = r.flag_reason || 'No reason recorded.';
   item.querySelector('.submission-time').textContent = friendlyTime(r.created_at);
 

@@ -12,6 +12,8 @@ const COMPLETIONS_SHEET = 'Completions';
 const COMPLETIONS_HEADERS = ['id', 'completed_at', 'google_sub', 'student_email', 'prompt_id'];
 const CHECKOUTS_SHEET = 'CheckOuts';
 const CHECKOUTS_HEADERS = ['id', 'student_email', 'student_name', 'google_sub', 'destination', 'teacher_email', 'notes', 'checked_out_at', 'checked_in_at', 'status', 'warning_sent'];
+const FLAGGED_INTERACTIONS_SHEET = 'FlaggedInteractions';
+const FLAGGED_INTERACTIONS_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'source', 'context', 'body', 'flag_reason', 'resolved'];
 const DEFAULT_OVERDUE_MINUTES = 10;
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status', 'closes_at', 'audience', 'shared_from', 'type', 'options_json', 'correct_option', 'rating_scale'];
@@ -205,7 +207,10 @@ function doPost(e) {
         return jsonOut_({ ok: true, suggestion: suggestPrompt_(payload.topic || '', payload.type || 'open') });
 
       case 'ask_study_buddy':
-        return jsonOut_({ ok: true, reply: askStudyBuddy_(payload.messages || []) });
+        return jsonOut_({ ok: true, reply: askStudyBuddy_(claims, payload.messages || []) });
+
+      case 'classify_note':
+        return jsonOut_({ ok: true, flagged: classifyNote_(claims, payload.body || '') });
 
       case 'list_my_responses':
         return jsonOut_({ ok: true, responses: listResponsesForStudent_(claims.sub) });
@@ -1646,8 +1651,169 @@ function getPollResults_(promptId) {
   return { type: 'poll', total: summary.total, options: summary.options };
 }
 
-function askStudyBuddy_(messages) {
+/* ============================================================
+   Unified safety pipeline — used by responses, notes, study chats
+   ============================================================ */
+
+// Lightweight distress-only classifier (yes/no + reason). Much faster than
+// the full feedback classifier — used wherever we want safety triage without
+// also generating teacher-readable feedback.
+function classifyDistress_(body) {
+  const text = String(body || '').trim();
+  if (!text) return { distress_detected: false, distress_reason: '' };
+
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) return { distress_detected: false, distress_reason: '' };
+  const model = props.getProperty('GEMINI_MODEL') || DEFAULT_GEMINI_MODEL;
+
+  const systemPrompt =
+    'You are a safety classifier for a K-12 school app. Read the text below ' +
+    'and decide if it shows signs of distress, self-harm, suicidal ideation, ' +
+    'abuse, or other safety concerns. Include subtle signs: hopelessness, ' +
+    'expressions of worthlessness, isolation, indirect references. When in ' +
+    'doubt, set distress_detected to true so a teacher can review.';
+
+  const schema = {
+    type: 'object',
+    properties: {
+      distress_detected: { type: 'boolean' },
+      distress_reason: { type: 'string' },
+    },
+    required: ['distress_detected'],
+  };
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(model) + ':generateContent?key=' +
+              encodeURIComponent(apiKey);
+  const requestBody = {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: 'user', parts: [{ text: text.slice(0, 4000) }] }],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 200,
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+    },
+  };
+
+  try {
+    const res = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(requestBody),
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) {
+      return { distress_detected: false, distress_reason: '' };
+    }
+    const data = JSON.parse(res.getContentText());
+    const candidate = data.candidates && data.candidates[0];
+    if (!candidate) return { distress_detected: false, distress_reason: '' };
+    const finishReason = candidate.finishReason || 'STOP';
+    if (finishReason !== 'STOP') {
+      // Safety filter intervened — treat as distress.
+      return { distress_detected: true, distress_reason: 'Safety filter triggered (' + finishReason + ')' };
+    }
+    const out = (candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text) || '';
+    if (!out) return { distress_detected: false, distress_reason: '' };
+    const parsed = JSON.parse(out);
+    return {
+      distress_detected: !!parsed.distress_detected,
+      distress_reason: String(parsed.distress_reason || '').trim(),
+    };
+  } catch (err) {
+    Logger.log('classifyDistress_ failed: ' + err);
+    return { distress_detected: false, distress_reason: '' };
+  }
+}
+
+// Classify a piece of student text from a non-prompt source (notes or study
+// chats). If flagged, log to FlaggedInteractions and email a teacher. Returns
+// true if flagged, false otherwise.
+function classifyAndMaybeFlag_(claims, body, source, context) {
+  if (!body || !String(body).trim()) return false;
+  const result = classifyDistress_(body);
+  if (!result.distress_detected) return false;
+
+  const sheet = getOrCreateSheet_(FLAGGED_INTERACTIONS_SHEET, FLAGGED_INTERACTIONS_HEADERS);
+  const id = Utilities.getUuid();
+  sheet.appendRow([
+    id,
+    new Date(),
+    claims.email,
+    claims.name || '',
+    claims.sub,
+    source,
+    context || '',
+    body,
+    result.distress_reason || 'Distress signals detected',
+    false,
+  ]);
+
+  try {
+    sendInteractionAlert_(claims, source, body, result.distress_reason || '', context || '');
+  } catch (err) {
+    Logger.log('sendInteractionAlert_ failed: ' + err);
+  }
+  return true;
+}
+
+function sendInteractionAlert_(claims, source, body, reason, context) {
+  const props = PropertiesService.getScriptProperties();
+  const alertEmail = props.getProperty('ALERT_EMAIL') || '';
+  const teachers = (props.getProperty('TEACHER_EMAILS') || '').split(',').map(s => s.trim()).filter(Boolean);
+  const recipient = alertEmail || teachers[0];
+  if (!recipient) {
+    Logger.log('No alert recipient configured for interaction flag');
+    return;
+  }
+
+  const sourceLabel = {
+    note: 'private note',
+    study_chat: 'AI Study Buddy message',
+  }[source] || source;
+
+  const studentLabel = (claims.name || claims.email) + ' <' + claims.email + '>';
+  const sheetUrl = getSheetUrl_();
+  const subject = '[AISA Hub] Flagged ' + sourceLabel + ' — ' + (claims.name || claims.email);
+  const emailBody =
+    'A student\'s ' + sourceLabel + ' was flagged for review.\n\n' +
+    'Student: ' + studentLabel + '\n' +
+    'Time: ' + new Date().toLocaleString() + '\n\n' +
+    'Why flagged: ' + (reason || 'Detected distress signals') + '\n\n' +
+    'Content:\n' + body + '\n\n' +
+    (context ? 'Context:\n' + context + '\n\n' : '') +
+    (sheetUrl ? 'Sheet: ' + sheetUrl + '\n\n' : '') +
+    'You can review and resolve this in the Flagged panel of Teacher Studio. ' +
+    'The student\'s content above is logged in the FlaggedInteractions tab.';
+
+  MailApp.sendEmail({ to: recipient, subject: subject, body: emailBody });
+}
+
+function classifyNote_(claims, body) {
+  return classifyAndMaybeFlag_(claims, body, 'note', '');
+}
+
+function askStudyBuddy_(claims, messages) {
   if (!Array.isArray(messages) || messages.length === 0) throw new Error('no message');
+
+  // Safety triage on the latest user message BEFORE we let the chat respond.
+  // Don't block the reply — the model already has a tutoring system prompt
+  // that redirects distress to a trusted adult. But we DO want a teacher
+  // notified.
+  try {
+    const lastUser = messages.slice().reverse().find(m => String(m.role || 'user') === 'user');
+    if (lastUser && lastUser.text) {
+      const recent = messages.slice(-4)
+        .map(m => (m.role || 'user') + ': ' + String(m.text || '').slice(0, 200))
+        .join('\n');
+      classifyAndMaybeFlag_(claims, String(lastUser.text), 'study_chat', recent);
+    }
+  } catch (err) {
+    Logger.log('Study chat safety triage failed: ' + err);
+  }
+
   const props = PropertiesService.getScriptProperties();
   const apiKey = props.getProperty('GEMINI_API_KEY');
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
@@ -1996,40 +2162,87 @@ function summarizePromptResponses_(promptId) {
 }
 
 function listFlaggedResponses_(includeResolved) {
-  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-  const values = sheet.getRange(2, 1, lastRow - 1, RESPONSES_HEADERS.length).getValues();
-  return values
-    .filter(r => (r[11] === true || String(r[11]).toLowerCase() === 'true'))
-    .filter(r => includeResolved || !(r[13] === true || String(r[13]).toLowerCase() === 'true'))
-    .map(r => ({
-      id: r[0],
-      created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
-      student_email: r[2],
-      student_name: r[3],
-      prompt_id: r[5],
-      prompt_title: r[6],
-      body: r[7],
-      flag_reason: r[12] || '',
-      resolved: r[13] === true || String(r[13]).toLowerCase() === 'true',
-    }))
-    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  const items = [];
+
+  // Flagged prompt responses
+  const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  const respLast = respSheet.getLastRow();
+  if (respLast >= 2) {
+    const values = respSheet.getRange(2, 1, respLast - 1, RESPONSES_HEADERS.length).getValues();
+    for (const r of values) {
+      const flagged = r[11] === true || String(r[11]).toLowerCase() === 'true';
+      if (!flagged) continue;
+      const resolved = r[13] === true || String(r[13]).toLowerCase() === 'true';
+      if (!includeResolved && resolved) continue;
+      items.push({
+        id: r[0],
+        created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+        student_email: r[2],
+        student_name: r[3],
+        source: 'response',
+        prompt_id: r[5],
+        prompt_title: r[6],
+        body: r[7],
+        flag_reason: r[12] || '',
+        resolved: resolved,
+      });
+    }
+  }
+
+  // Flagged notes + study chats
+  const intSheet = getOrCreateSheet_(FLAGGED_INTERACTIONS_SHEET, FLAGGED_INTERACTIONS_HEADERS);
+  const intLast = intSheet.getLastRow();
+  if (intLast >= 2) {
+    const values = intSheet.getRange(2, 1, intLast - 1, FLAGGED_INTERACTIONS_HEADERS.length).getValues();
+    for (const r of values) {
+      const resolved = r[9] === true || String(r[9]).toLowerCase() === 'true';
+      if (!includeResolved && resolved) continue;
+      items.push({
+        id: r[0],
+        created_at: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+        student_email: r[2],
+        student_name: r[3],
+        source: String(r[5] || 'other'),
+        prompt_id: '',
+        prompt_title: '',
+        context: r[6] || '',
+        body: r[7],
+        flag_reason: r[8] || '',
+        resolved: resolved,
+      });
+    }
+  }
+
+  return items.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
 function resolveFlaggedResponse_(responseId) {
   if (!responseId) return { ok: false, error: 'response_id required' };
-  const sheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { ok: false, error: 'no responses' };
-  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (ids[i][0] === responseId) {
-      sheet.getRange(i + 2, 14).setValue(true);
-      return { ok: true, response_id: responseId };
-    }
+
+  // Try the Responses sheet first (resolved column = 14)
+  const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
+  if (markResolvedById_(respSheet, responseId, 14)) {
+    return { ok: true, response_id: responseId };
+  }
+  // Then FlaggedInteractions (resolved column = 10)
+  const intSheet = getOrCreateSheet_(FLAGGED_INTERACTIONS_SHEET, FLAGGED_INTERACTIONS_HEADERS);
+  if (markResolvedById_(intSheet, responseId, 10)) {
+    return { ok: true, response_id: responseId };
   }
   return { ok: false, error: 'not found' };
+}
+
+function markResolvedById_(sheet, id, resolvedColumn) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return false;
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0] === id) {
+      sheet.getRange(i + 2, resolvedColumn).setValue(true);
+      return true;
+    }
+  }
+  return false;
 }
 
 function listStudentsForPrompt_(promptId) {

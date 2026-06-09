@@ -949,6 +949,8 @@ function notesStorageKey() {
 }
 
 let notesSaveTimer = null;
+let notesClassifyTimer = null;
+let lastClassifiedNoteSnapshot = '';
 function setupNotes() {
   const textarea = document.getElementById('notes-textarea');
   const status = document.getElementById('notes-status');
@@ -961,6 +963,7 @@ function setupNotes() {
       if (saved != null) {
         textarea.value = saved;
         status.textContent = 'Saved on this device.';
+        lastClassifiedNoteSnapshot = saved;
       } else {
         status.textContent = 'Start typing — your notes save automatically.';
       }
@@ -978,7 +981,32 @@ function setupNotes() {
         status.textContent = "Couldn't save (storage full?)";
       }
     }, 400);
+
+    // Separately, debounce a safety classification — fire-and-forget.
+    // The server only stores the note's body if it's flagged; otherwise
+    // nothing is logged. Privacy preserved while still catching distress.
+    if (notesClassifyTimer) clearTimeout(notesClassifyTimer);
+    notesClassifyTimer = setTimeout(() => maybeClassifyNote(textarea.value), 3000);
   });
+
+  // Also classify when the user navigates away from the notes view or
+  // closes the tab — catches edits that might never have triggered the
+  // 3-second debounce.
+  document.querySelectorAll('[data-back]').forEach(el => {
+    el.addEventListener('click', () => maybeClassifyNote(textarea.value));
+  });
+  window.addEventListener('beforeunload', () => maybeClassifyNote(textarea.value));
+}
+
+async function maybeClassifyNote(body) {
+  const text = String(body || '').trim();
+  if (!text) return;
+  // Skip if nothing materially changed since last classification.
+  if (text === lastClassifiedNoteSnapshot) return;
+  lastClassifiedNoteSnapshot = text;
+  try {
+    await api('classify_note', { body: text });
+  } catch (_) { /* silent — safety call shouldn't disturb the student */ }
 }
 
 /* ============================================================
