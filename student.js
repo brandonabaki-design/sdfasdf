@@ -60,6 +60,7 @@ function renderProfile(p) {
   renderStats(p.summary);
   renderHeatmap(p.heatmap);
   renderFlagged(p.flagged);
+  renderResolutionHistory(p.resolutions);
   renderPrompts(p.prompts);
   renderResponseHistory(p.responses);
   renderCheckouts(p.checkouts, p.summary);
@@ -175,6 +176,72 @@ function renderFlagged(flagged) {
     item.querySelector('.submission-time').textContent = friendlyTime(r.created_at);
     item.querySelector('.response-body').textContent = r.body;
     list.appendChild(item);
+  }
+}
+
+const SOURCE_LABELS = {
+  response: { label: 'Prompt response', emoji: '📝' },
+  note: { label: 'Private note', emoji: '📓' },
+  study_chat: { label: 'AI Study Buddy', emoji: '🤖' },
+};
+
+function renderResolutionHistory(resolutions) {
+  const section = document.getElementById('resolutions-section');
+  const list = document.getElementById('resolutions-list');
+  if (!section || !list) return;
+  if (!resolutions || resolutions.length === 0) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  list.innerHTML = '';
+  for (const r of resolutions) {
+    const meta = SOURCE_LABELS[String(r.flag_source || '').toLowerCase()]
+      || { label: 'Interaction', emoji: '⚠️' };
+    const severityClass = 'sev-' + String(r.severity || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const card = document.createElement('article');
+    card.className = 'resolution-card ' + severityClass;
+    card.innerHTML = `
+      <header class="resolution-card-head">
+        <span class="resolution-source">
+          <span aria-hidden="true"></span>
+          <span class="resolution-source-label"></span>
+        </span>
+        <span class="severity-pill"></span>
+        <span class="resolution-when muted small"></span>
+      </header>
+      <dl class="resolution-grid">
+        <div class="resolution-row">
+          <dt>Action taken</dt>
+          <dd class="res-action"></dd>
+        </div>
+        <div class="resolution-row">
+          <dt>Follow-up</dt>
+          <dd class="res-followup"></dd>
+        </div>
+        <div class="resolution-row resolution-by">
+          <dt>Resolved by</dt>
+          <dd class="res-by"></dd>
+        </div>
+      </dl>
+      <p class="resolution-notes muted small" hidden></p>
+    `;
+    card.querySelector('.resolution-source span[aria-hidden]').textContent = meta.emoji;
+    card.querySelector('.resolution-source-label').textContent = meta.label;
+    card.querySelector('.severity-pill').textContent = r.severity || '—';
+    card.querySelector('.resolution-when').textContent = r.resolved_at ? friendlyTime(r.resolved_at) : '';
+    card.querySelector('.res-action').textContent = r.action_taken || '—';
+    card.querySelector('.res-followup').textContent = r.followup || '—';
+    const by = r.resolved_by_name
+      ? `${r.resolved_by_name} (${r.resolved_by_email || ''})`
+      : (r.resolved_by_email || '—');
+    card.querySelector('.res-by').textContent = by;
+    if (r.notes) {
+      const notes = card.querySelector('.resolution-notes');
+      notes.hidden = false;
+      notes.textContent = 'Notes: ' + r.notes;
+    }
+    list.appendChild(card);
   }
 }
 

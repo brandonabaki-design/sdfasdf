@@ -903,13 +903,41 @@ function fillList(ul, items) {
    Flagged panel (MagicSchool-style slide-in)
    ============================================================ */
 
+// Cache of every flagged item (open + resolved) so tab switching is instant
+// and the topbar pill can count just the open ones.
+let allFlaggedItems = [];
+let currentFlaggedView = 'open';
+
 async function refreshFlaggedCount() {
   try {
-    const data = await api('list_flagged_responses', { include_resolved: false });
+    const data = await api('list_flagged_responses', { include_resolved: true });
     if (!data.ok) return;
-    updateFlaggedButton(data.responses);
-    populateFlaggedPanel(data.responses);
+    allFlaggedItems = data.responses || [];
+    const open = allFlaggedItems.filter(r => !r.resolved);
+    const resolved = allFlaggedItems.filter(r => r.resolved);
+    updateFlaggedButton(open);
+    updateFlaggedTabCounts(open.length, resolved.length);
+    populateFlaggedPanel(currentFlaggedView === 'resolved' ? resolved : open);
   } catch (err) { /* silent */ }
+}
+
+function updateFlaggedTabCounts(openCount, resolvedCount) {
+  const o = document.getElementById('flagged-tab-count-open');
+  const r = document.getElementById('flagged-tab-count-resolved');
+  if (o) o.textContent = String(openCount);
+  if (r) r.textContent = String(resolvedCount);
+}
+
+function switchFlaggedView(view) {
+  if (view !== 'open' && view !== 'resolved') return;
+  currentFlaggedView = view;
+  document.querySelectorAll('.flagged-tab').forEach(tab => {
+    const active = tab.dataset.flaggedView === view;
+    tab.classList.toggle('is-active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  const filtered = allFlaggedItems.filter(r => view === 'resolved' ? r.resolved : !r.resolved);
+  populateFlaggedPanel(filtered);
 }
 
 // Flags older than this (in hours) are surfaced as "awaiting follow-up" —
@@ -941,15 +969,39 @@ function populateFlaggedPanel(responses) {
   const list = document.getElementById('flagged-list');
   const sub = document.getElementById('flagged-panel-sub');
   if (!list || !sub) return;
+  const view = currentFlaggedView;
   if (responses.length === 0) {
-    sub.textContent = 'No items currently flagged.';
-    list.innerHTML = `
-      <div class="flagged-empty">
-        <span class="empty-icon" aria-hidden="true">✅</span>
-        <h3 class="font-heading">All clear</h3>
-        <p>No student responses have been flagged for review.</p>
-      </div>
-    `;
+    if (view === 'resolved') {
+      sub.textContent = 'No flags resolved yet.';
+      list.innerHTML = `
+        <div class="flagged-empty">
+          <span class="empty-icon" aria-hidden="true">🗂️</span>
+          <h3 class="font-heading">Nothing here yet</h3>
+          <p>Once you resolve a flag, the report shows up here.</p>
+        </div>
+      `;
+    } else {
+      sub.textContent = 'No items currently flagged.';
+      list.innerHTML = `
+        <div class="flagged-empty">
+          <span class="empty-icon" aria-hidden="true">✅</span>
+          <h3 class="font-heading">All clear</h3>
+          <p>No student responses have been flagged for review.</p>
+        </div>
+      `;
+    }
+    return;
+  }
+  if (view === 'resolved') {
+    // Resolved view: newest closures first so this week's work is visible.
+    const sorted = responses.slice().sort((a, b) => {
+      const ar = a.resolution && a.resolution.resolved_at ? a.resolution.resolved_at : a.created_at;
+      const br = b.resolution && b.resolution.resolved_at ? b.resolution.resolved_at : b.created_at;
+      return ar < br ? 1 : -1;
+    });
+    sub.textContent = `${sorted.length} resolved flag${sorted.length === 1 ? '' : 's'} · most recent first.`;
+    list.innerHTML = '';
+    for (const r of sorted) list.appendChild(renderResolvedItem(r));
     return;
   }
   const overdueCount = responses.filter(isFlagOverdue).length;
@@ -960,6 +1012,106 @@ function populateFlaggedPanel(responses) {
   for (const r of responses) {
     list.appendChild(renderFlaggedItem(r));
   }
+}
+
+function renderResolvedItem(r) {
+  const item = document.createElement('article');
+  item.className = 'flagged-item is-resolved';
+  item.dataset.id = r.id;
+  const initials = (r.student_name || r.student_email || '?')
+    .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
+
+  const source = String(r.source || 'response').toLowerCase();
+  const sourceMeta = {
+    response: { label: 'Prompt response', emoji: '📝', tone: 'tone-rose' },
+    note: { label: 'Private note', emoji: '📓', tone: 'tone-amber' },
+    study_chat: { label: 'AI Study Buddy', emoji: '🤖', tone: 'tone-violet' },
+  }[source] || { label: 'Interaction', emoji: '⚠️', tone: 'tone-rose' };
+
+  let contextHtml = '';
+  if (source === 'response' && r.prompt_title) {
+    contextHtml = `<p class="prompt-context">On prompt: <strong></strong></p>`;
+  } else if (source === 'note') {
+    contextHtml = `<p class="prompt-context">A passage from this student's private notebook.</p>`;
+  } else if (source === 'study_chat') {
+    contextHtml = `<p class="prompt-context">From their chat with the AI Study Buddy.</p>`;
+  }
+
+  const res = r.resolution || null;
+  const severityClass = res ? 'sev-' + String(res.severity || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') : '';
+
+  item.innerHTML = `
+    <p class="flagged-resolved-banner">✅ Resolved${res && res.resolved_at ? ' · ' + friendlyTime(res.resolved_at) : ''}</p>
+    <div class="flagged-item-head">
+      <span class="flagged-avatar"></span>
+      <div class="student-line">
+        <p class="student-name"></p>
+        <p class="student-email"></p>
+      </div>
+      <span class="flagged-source-pill ${sourceMeta.tone}">
+        <span aria-hidden="true">${sourceMeta.emoji}</span>
+        <span>${sourceMeta.label}</span>
+      </span>
+    </div>
+    ${contextHtml}
+    <p class="response-body"></p>
+    <div class="flag-reason">
+      <span class="reason-label">Why:</span>
+      <span class="reason-text"></span>
+    </div>
+    ${res ? `
+      <div class="resolution-report ${severityClass}">
+        <p class="resolution-report-title">Resolution report</p>
+        <dl class="resolution-grid">
+          <div class="resolution-row">
+            <dt>Action taken</dt>
+            <dd class="res-action"></dd>
+          </div>
+          <div class="resolution-row">
+            <dt>Severity</dt>
+            <dd><span class="severity-pill"></span></dd>
+          </div>
+          <div class="resolution-row">
+            <dt>Follow-up</dt>
+            <dd class="res-followup"></dd>
+          </div>
+          <div class="resolution-row resolution-by">
+            <dt>Resolved by</dt>
+            <dd class="res-by"></dd>
+          </div>
+          ${res.notes ? `
+            <div class="resolution-row resolution-notes-row">
+              <dt>Notes</dt>
+              <dd class="res-notes"></dd>
+            </div>
+          ` : ''}
+        </dl>
+      </div>
+    ` : '<p class="muted small">No resolution report on file.</p>'}
+    <div class="flagged-item-footer">
+      <span class="submission-time"></span>
+    </div>
+  `;
+  item.querySelector('.flagged-avatar').textContent = initials || '?';
+  item.querySelector('.student-name').textContent = r.student_name || '(no name)';
+  item.querySelector('.student-email').textContent = r.student_email || '';
+  const promptStrong = item.querySelector('.prompt-context strong');
+  if (promptStrong && source === 'response') promptStrong.textContent = r.prompt_title || '(untitled)';
+  item.querySelector('.response-body').textContent = r.body || '';
+  item.querySelector('.reason-text').textContent = r.flag_reason || 'No reason recorded.';
+  item.querySelector('.submission-time').textContent = 'Flagged ' + friendlyTime(r.created_at);
+
+  if (res) {
+    item.querySelector('.res-action').textContent = res.action_taken || '—';
+    item.querySelector('.severity-pill').textContent = res.severity || '—';
+    item.querySelector('.res-followup').textContent = res.followup || '—';
+    const by = res.resolved_by_name
+      ? `${res.resolved_by_name} (${res.resolved_by_email || ''})`
+      : (res.resolved_by_email || '—');
+    item.querySelector('.res-by').textContent = by;
+    if (res.notes) item.querySelector('.res-notes').textContent = res.notes;
+  }
+  return item;
 }
 
 function renderFlaggedItem(r) {
@@ -1505,6 +1657,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('flagged-btn').addEventListener('click', openFlaggedPanel);
   document.getElementById('flagged-close').addEventListener('click', closeFlaggedPanel);
   document.getElementById('flagged-backdrop').addEventListener('click', closeFlaggedPanel);
+  document.querySelectorAll('.flagged-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchFlaggedView(tab.dataset.flaggedView));
+  });
 
   document.getElementById('checkouts-btn').addEventListener('click', openCheckoutsPanel);
   document.getElementById('checkouts-close').addEventListener('click', closeCheckoutsPanel);

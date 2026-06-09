@@ -93,6 +93,18 @@
       </div>
       <button class="flagged-close" id="flagged-close" aria-label="Close flagged panel">×</button>
     </header>
+    <div class="flagged-tabs" role="tablist" aria-label="Flagged view">
+      <button type="button" class="flagged-tab is-active" data-flagged-view="open"
+              role="tab" aria-selected="true" id="flagged-tab-open">
+        <span>Open</span>
+        <span class="flagged-tab-count" id="flagged-tab-count-open">0</span>
+      </button>
+      <button type="button" class="flagged-tab" data-flagged-view="resolved"
+              role="tab" aria-selected="false" id="flagged-tab-resolved">
+        <span>Resolved</span>
+        <span class="flagged-tab-count" id="flagged-tab-count-resolved">0</span>
+      </button>
+    </div>
     <div class="flagged-list" id="flagged-list">
       <div class="flagged-empty">
         <span class="empty-icon" aria-hidden="true">✅</span>

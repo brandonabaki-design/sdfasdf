@@ -2410,9 +2410,42 @@ function listFlaggedResponses_(includeResolved) {
     }
   }
 
+  // Attach the resolution report to each resolved item so the panel can show
+  // who handled it, how, and when, without a second API round-trip.
+  if (includeResolved && items.some(i => i.resolved)) {
+    const byFlagId = getResolutionsByFlagIdMap_();
+    for (const item of items) {
+      if (item.resolved && byFlagId[item.id]) item.resolution = byFlagId[item.id];
+    }
+  }
+
   // Triage order: oldest unresolved flag rises to the top so a forgotten
   // flag never hides at the bottom.
   return items.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+}
+
+function getResolutionsByFlagIdMap_() {
+  const sheet = getOrCreateSheet_(RESOLUTIONS_SHEET, RESOLUTIONS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  const map = {};
+  if (lastRow < 2) return map;
+  const values = sheet.getRange(2, 1, lastRow - 1, RESOLUTIONS_HEADERS.length).getValues();
+  for (const r of values) {
+    const flagId = String(r[1] || '');
+    if (!flagId) continue;
+    map[flagId] = {
+      resolution_id: r[0],
+      flag_source: r[2],
+      resolved_by_email: r[6],
+      resolved_by_name: r[7],
+      resolved_at: r[8] instanceof Date ? r[8].toISOString() : String(r[8]),
+      action_taken: r[9],
+      severity: r[10],
+      followup: r[11],
+      notes: r[12] || '',
+    };
+  }
+  return map;
 }
 
 function resolveFlaggedResponse_(claims, payload) {

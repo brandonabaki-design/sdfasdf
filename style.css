@@ -2230,6 +2230,182 @@ body:not(.is-signed-in) #step-out-btn { display: none !important; }
 .flagged-source-pill.tone-amber { background: var(--gold-soft); color: var(--gold-dark); border: 1px solid #fcd34d; }
 .flagged-source-pill.tone-violet { background: var(--violet-soft); color: var(--violet); border: 1px solid #d8b4fe; }
 
+/* Open / Resolved tabs at the top of the Flagged panel */
+.flagged-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 18px 0;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+}
+.flagged-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 10px 14px 10px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px 8px 0 0;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.flagged-tab:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.flagged-tab.is-active {
+  color: var(--indigo);
+  border-bottom-color: var(--indigo);
+}
+.flagged-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.flagged-tab.is-active .flagged-tab-count {
+  background: var(--indigo);
+  color: white;
+}
+
+/* Resolved item treatment inside the Flagged panel */
+.flagged-item.is-resolved {
+  border-color: var(--emerald);
+  background: linear-gradient(180deg, #ecfdf5, var(--bg-panel) 40%);
+  box-shadow: 0 0 0 1px rgba(5, 150, 105, 0.18);
+}
+.flagged-resolved-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: var(--emerald);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* Resolution report (used inside the resolved flag item AND on the student profile) */
+.resolution-report {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+.resolution-report-title {
+  margin: 0 0 10px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.resolution-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.resolution-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  margin: 0;
+}
+.resolution-row dt {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.resolution-row dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.resolution-notes-row dd { white-space: pre-wrap; }
+.res-notes { white-space: pre-wrap; }
+
+/* Severity pill colour — close-enough mapping for any closed-list value */
+.severity-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+}
+.sev-low .severity-pill,
+.sev-minor .severity-pill {
+  background: var(--emerald-soft); color: var(--emerald); border-color: #6ee7b7;
+}
+.sev-moderate .severity-pill,
+.sev-medium .severity-pill {
+  background: var(--gold-soft); color: var(--gold-dark); border-color: #fcd34d;
+}
+.sev-high .severity-pill,
+.sev-urgent .severity-pill,
+.sev-severe .severity-pill,
+.sev-critical .severity-pill {
+  background: var(--rose-soft); color: var(--rose); border-color: #fca5a5;
+}
+
+/* Resolution history card on the student profile */
+.resolution-card {
+  padding: 16px 18px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.resolution-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.resolution-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--text);
+  font-size: 14px;
+}
+.resolution-when { margin-left: auto; }
+.resolution-notes:not([hidden]) {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
 .flag-banner {
   display: inline-block;
   background: rgba(244, 63, 94, 0.14);
