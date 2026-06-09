@@ -2,17 +2,14 @@
 //
 // Every teacher page (teacher.html, dashboard.html, student.html) has just
 // <nav class="topbar" data-page="<id>"></nav> in its HTML. This module fills
-// it with brand + nav links + role-gated pills + user chip on load, so the
-// nav stays identical wherever you are. Pill buttons here are placeholders;
-// the matching panel modules (checkouts-panel.js, flagged-panel.js) own the
-// behavior and reveal the pills when their first fetch succeeds.
+// it with the brand, role-gated pills, and the account slot. Page-to-page
+// navigation lives in the shared hamburger drawer (nav-drawer.js), so the
+// menu is identical everywhere — this just supplies the teacher-only pills
+// (Flagged, Out now) and the page label in the brand. The pill buttons are
+// placeholders; the panel modules (checkouts-panel.js, flagged-panel.js)
+// own their behavior and reveal them when their first fetch succeeds.
 
 (function () {
-  const TEACHER_LINKS = [
-    { id: 'teacher', href: 'teacher.html', label: 'Studio', emoji: '✍️' },
-    { id: 'dashboard', href: 'dashboard.html', label: 'Dashboard', emoji: '📊' },
-  ];
-
   const PAGE_LABELS = {
     teacher: 'Teacher Studio',
     dashboard: 'Dashboard',
@@ -29,8 +26,6 @@
           <span class="brand-sub" id="menu-page-label"></span>
         </span>
       </a>
-
-      <div class="menu-links" id="menu-links" role="navigation"></div>
 
       <div class="topbar-meta">
         <span id="menu-page-actions" class="menu-page-actions"></span>
@@ -50,18 +45,8 @@
 
     document.getElementById('menu-page-label').textContent = PAGE_LABELS[pageId] || 'AISA';
 
-    const linksEl = document.getElementById('menu-links');
-    for (const p of TEACHER_LINKS) {
-      const a = document.createElement('a');
-      a.href = p.href;
-      a.className = 'menu-link' + (p.id === pageId ? ' is-current' : '');
-      if (p.id === pageId) a.setAttribute('aria-current', 'page');
-      a.innerHTML = `<span class="menu-link-icon" aria-hidden="true">${p.emoji}</span><span>${p.label}</span>`;
-      linksEl.appendChild(a);
-    }
-
-    // Account avatar + dropdown are owned by account-menu.js, which fills
-    // the #account-slot we rendered above.
+    // The hamburger (nav-drawer.js) and account avatar (account-menu.js) inject
+    // themselves into this topbar / the #account-slot once their scripts run.
   }
 
   function hideAll() {

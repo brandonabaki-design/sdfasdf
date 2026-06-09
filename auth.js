@@ -346,3 +346,38 @@ function prefetchStudentProfile(sub, email) {
     .finally(() => { _profilePrefetchInFlight.delete(key); });
   _profilePrefetchInFlight.set(key, p);
 }
+
+/* ============================================================
+   Shared role resolution
+   ------------------------------------------------------------
+   whoami tells us whether the signed-in account is a teacher. Lots of UI
+   needs this (the nav drawer's teacher links, page gating). resolveRole()
+   memoizes a single whoami per page load and broadcasts the result on the
+   `aisa:role` event, so any module can react without making its own call.
+   ============================================================ */
+
+let _rolePromise = null;
+let lastRole = null;
+
+function resolveRole(force) {
+  if (force) _rolePromise = null;
+  if (_rolePromise) return _rolePromise;
+  _rolePromise = (async () => {
+    let role;
+    try {
+      const me = await api('whoami');
+      role = { ok: !!(me && me.ok), is_teacher: !!(me && me.is_teacher), email: (me && me.email) || (currentUser && currentUser.email) || '' };
+    } catch (err) {
+      role = { ok: false, is_teacher: false, email: (currentUser && currentUser.email) || '' };
+    }
+    lastRole = role;
+    document.dispatchEvent(new CustomEvent('aisa:role', { detail: role }));
+    return role;
+  })();
+  return _rolePromise;
+}
+
+// Auto-resolve the role on every sign-in, and reset the memo on sign-out so a
+// different account in the same tab re-checks cleanly.
+document.addEventListener('aisa:signed-in', () => { resolveRole(true); });
+document.addEventListener('aisa:signed-out', () => { _rolePromise = null; lastRole = null; });

@@ -205,7 +205,7 @@ async function showSignedIn(user) {
   const tools = document.getElementById('teacher-tools');
 
   try {
-    const me = await api('whoami');
+    const me = await resolveRole();
     roleLoading.hidden = true;
     if (me.ok && me.is_teacher) {
       tools.hidden = false;

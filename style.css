@@ -329,7 +329,7 @@ body::before {
   border-bottom: 1px solid var(--navy-base);
   box-shadow: 0 4px 16px -8px rgba(11, 21, 51, 0.25);
 }
-.topbar .brand { color: #ffffff; }
+.topbar .brand { color: #ffffff; margin-right: auto; }
 .topbar .brand-text .brand-sub { color: rgba(255, 255, 255, 0.78); }
 .topbar .user-chip {
   background: rgba(255, 255, 255, 0.10);
@@ -393,41 +393,7 @@ body::before {
 
 .topbar-meta { display: flex; align-items: center; gap: 12px; }
 
-/* Shared teacher-area nav links (rendered by menu.js) */
-.menu-links {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  justify-content: center;
-}
-.menu-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  color: rgba(255, 255, 255, 0.78);
-  font-weight: 600;
-  font-size: 14px;
-  text-decoration: none;
-  transition: color 0.15s, background 0.15s;
-}
-.menu-link:hover,
-.menu-link:focus-visible {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.10);
-  outline: none;
-}
-.menu-link.is-current {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.16);
-}
-.menu-link-icon { font-size: 16px; }
 .menu-page-actions { display: inline-flex; align-items: center; gap: 8px; }
-@media (max-width: 720px) {
-  .menu-links { display: none; }
-}
 
 /* Account avatar + dropdown (replaces the old user-chip + sign-out button) */
 .account-wrap { position: relative; display: inline-flex; }
@@ -566,7 +532,329 @@ body:not(.is-signed-in) #sign-out,
 body:not(.is-signed-in) #flagged-btn,
 body:not(.is-signed-in) #assignments-btn,
 body:not(.is-signed-in) #checkouts-btn,
+body:not(.is-signed-in) #nav-burger,
 body:not(.is-signed-in) #step-out-btn { display: none !important; }
+
+/* ============================================================
+   Hamburger button + universal nav drawer (nav-drawer.js)
+   ============================================================ */
+
+.nav-burger {
+  appearance: none;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  margin-right: 4px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+.nav-burger:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.30);
+}
+.nav-burger:active { transform: scale(0.94); }
+.nav-burger:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--gold); }
+.nav-burger-box {
+  position: relative;
+  width: 20px;
+  height: 14px;
+  display: block;
+}
+.nav-burger-inner,
+.nav-burger-inner::before,
+.nav-burger-inner::after {
+  position: absolute;
+  left: 0;
+  width: 20px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: transform 0.22s ease, top 0.22s ease, opacity 0.18s ease;
+}
+.nav-burger-inner { top: 50%; transform: translateY(-50%); }
+.nav-burger-inner::before { content: ""; top: -6px; }
+.nav-burger-inner::after  { content: ""; top: 6px; }
+/* When the drawer is open the burger morphs into an X (the burger is still in
+   the topbar behind the drawer on wide screens). */
+.nav-burger[aria-expanded="true"] .nav-burger-inner { background: transparent; }
+.nav-burger[aria-expanded="true"] .nav-burger-inner::before { top: 0; transform: rotate(45deg); }
+.nav-burger[aria-expanded="true"] .nav-burger-inner::after  { top: 0; transform: rotate(-45deg); }
+
+.nav-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(11, 21, 51, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+.nav-drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.nav-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 70;
+  width: min(320px, 86vw);
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  box-shadow: 24px 0 60px -20px rgba(11, 21, 51, 0.45);
+  transform: translateX(-100%);
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.nav-drawer.open { transform: translateX(0); }
+
+.nav-drawer-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 20px 16px;
+  background: linear-gradient(135deg, var(--navy-deep), var(--navy-elevated));
+  color: #ffffff;
+}
+.nav-drawer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.nav-drawer-brand .brand-mark { width: 40px; height: 40px; font-size: 22px; }
+.nav-drawer-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  font-family: var(--font-heading);
+}
+.nav-drawer-brand-name {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: linear-gradient(135deg, var(--amber-bright), var(--amber));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.nav-drawer-brand-sub { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.7); }
+.nav-drawer-close {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+.nav-drawer-close:hover { background: rgba(255, 255, 255, 0.20); }
+.nav-drawer-close:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--gold); }
+
+.nav-drawer-identity {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.nav-drawer-avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--indigo), var(--violet));
+  color: #ffffff;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 14px;
+}
+.nav-drawer-identity-text { min-width: 0; display: flex; flex-direction: column; }
+.nav-drawer-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-drawer-email {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-drawer-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 12px 6px;
+}
+.nav-drawer-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 10px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--text-dim);
+}
+.nav-drawer-teacher-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--indigo-soft);
+  color: var(--indigo);
+  border: 1px solid #c7d2fe;
+}
+.nav-drawer-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-drawer-teaching {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.nav-drawer-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--text);
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.nav-drawer-link:hover { background: var(--bg-elevated); }
+.nav-drawer-link:active { transform: scale(0.99); }
+.nav-drawer-link:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--gold); }
+.nav-drawer-link.is-current {
+  background: var(--indigo-soft);
+}
+.nav-drawer-link.is-current::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--indigo);
+}
+.nav-drawer-link.is-disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.nav-drawer-link-icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  background: var(--bg-elevated);
+  border-radius: 10px;
+}
+.nav-drawer-link.is-current .nav-drawer-link-icon {
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+.nav-drawer-link-text { min-width: 0; display: flex; flex-direction: column; }
+.nav-drawer-link-label {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  line-height: 1.2;
+}
+.nav-drawer-link.is-current .nav-drawer-link-label { color: var(--indigo); }
+.nav-drawer-link-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  margin-top: 1px;
+}
+.nav-drawer-link-dot {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--indigo);
+}
+
+.nav-drawer-foot {
+  flex-shrink: 0;
+  padding: 12px 14px 16px;
+  border-top: 1px solid var(--border);
+}
+.nav-drawer-signout {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.nav-drawer-signout:hover {
+  background: var(--rose-soft);
+  border-color: #fca5a5;
+  color: var(--rose);
+}
+.nav-drawer-signout:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--gold); }
+.nav-drawer-signout-icon { font-size: 16px; }
+.nav-drawer-footnote {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+body.nav-drawer-locked { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-drawer { transition: none; }
+  .nav-drawer-backdrop { transition: none; }
+}
 
 /* ============================================================
    Out-now button + panel (teacher)

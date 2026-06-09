@@ -40,7 +40,7 @@ async function loadDashboard() {
   content.hidden = true;
 
   try {
-    const me = await api('whoami');
+    const me = await resolveRole();
     if (!me.ok || !me.is_teacher) {
       roleLoading.hidden = true;
       notTeacher.hidden = false;
