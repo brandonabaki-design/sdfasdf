@@ -986,7 +986,37 @@ function renderFlaggedItem(r) {
     </div>
     <div class="flagged-item-footer">
       <span class="submission-time"></span>
-      <button type="button" class="btn-success resolve-btn">Mark resolved</button>
+      <button type="button" class="btn-success resolve-btn">Resolve…</button>
+    </div>
+    <div class="resolve-form" hidden>
+      <p class="resolve-form-title">Resolution report</p>
+      <label class="resolve-field">
+        <span class="resolve-field-label">Action taken<span class="required">*</span></span>
+        <select class="resolve-action" required>
+          <option value="">— pick one —</option>
+        </select>
+      </label>
+      <label class="resolve-field">
+        <span class="resolve-field-label">Severity<span class="required">*</span></span>
+        <select class="resolve-severity" required>
+          <option value="">— pick one —</option>
+        </select>
+      </label>
+      <label class="resolve-field">
+        <span class="resolve-field-label">Follow-up<span class="required">*</span></span>
+        <select class="resolve-followup" required>
+          <option value="">— pick one —</option>
+        </select>
+      </label>
+      <label class="resolve-field">
+        <span class="resolve-field-label">Notes <span class="resolve-field-hint">(optional · 500 chars max)</span></span>
+        <textarea class="resolve-notes" rows="3" maxlength="500" placeholder="What happened, who you spoke to, anything important the next teacher should know."></textarea>
+      </label>
+      <p class="resolve-error muted small" aria-live="polite"></p>
+      <div class="resolve-actions">
+        <button type="button" class="btn btn-ghost cancel-resolve">Cancel</button>
+        <button type="button" class="btn-success submit-resolve">Mark resolved</button>
+      </div>
     </div>
   `;
   item.querySelector('.flagged-avatar').textContent = initials || '?';
@@ -1001,27 +1031,88 @@ function renderFlaggedItem(r) {
   item.querySelector('.submission-time').textContent = friendlyTime(r.created_at);
 
   const resolveBtn = item.querySelector('.resolve-btn');
-  resolveBtn.addEventListener('click', async () => {
-    resolveBtn.disabled = true;
-    resolveBtn.textContent = 'Resolving...';
+  const resolveForm = item.querySelector('.resolve-form');
+  const cancelBtn = item.querySelector('.cancel-resolve');
+  const submitBtn = item.querySelector('.submit-resolve');
+  const errorEl = item.querySelector('.resolve-error');
+  populateResolutionDropdowns(item);
+
+  resolveBtn.addEventListener('click', () => {
+    resolveForm.hidden = false;
+    resolveBtn.hidden = true;
+    setTimeout(() => item.querySelector('.resolve-action').focus(), 50);
+  });
+  cancelBtn.addEventListener('click', () => {
+    resolveForm.hidden = true;
+    resolveBtn.hidden = false;
+    errorEl.textContent = '';
+  });
+  submitBtn.addEventListener('click', async () => {
+    const action = item.querySelector('.resolve-action').value;
+    const severity = item.querySelector('.resolve-severity').value;
+    const followup = item.querySelector('.resolve-followup').value;
+    const notes = item.querySelector('.resolve-notes').value.trim();
+    if (!action || !severity || !followup) {
+      errorEl.textContent = 'Please pick an option for every required field.';
+      return;
+    }
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving…';
+    errorEl.textContent = '';
     try {
-      const data = await api('resolve_flagged_response', { response_id: r.id });
+      const data = await api('resolve_flagged_response', {
+        response_id: r.id,
+        action_taken: action,
+        severity: severity,
+        followup: followup,
+        notes: notes,
+      });
       if (data.ok) {
         item.style.opacity = '0.4';
         setTimeout(() => item.remove(), 250);
         setTimeout(refreshFlaggedCount, 350);
+        announce('Resolution saved.');
       } else {
-        resolveBtn.disabled = false;
-        resolveBtn.textContent = 'Mark resolved';
-        alert('Error: ' + (friendlyError(data.error)));
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Mark resolved';
+        errorEl.textContent = friendlyError(data.error);
       }
     } catch (err) {
-      resolveBtn.disabled = false;
-      resolveBtn.textContent = 'Mark resolved';
-      alert('Network error: ' + err.message);
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Mark resolved';
+      errorEl.textContent = 'Network error: ' + err.message;
     }
   });
   return item;
+}
+
+// Cache of dropdown options so we only fetch once per session.
+let resolutionOptionsCache = null;
+async function getResolutionOptions() {
+  if (resolutionOptionsCache) return resolutionOptionsCache;
+  try {
+    const data = await api('get_resolution_options');
+    if (data.ok) resolutionOptionsCache = data.options;
+  } catch (_) {}
+  return resolutionOptionsCache || { actions: [], severities: [], followups: [] };
+}
+
+async function populateResolutionDropdowns(item) {
+  const opts = await getResolutionOptions();
+  fillSelect(item.querySelector('.resolve-action'), opts.actions);
+  fillSelect(item.querySelector('.resolve-severity'), opts.severities);
+  fillSelect(item.querySelector('.resolve-followup'), opts.followups);
+}
+function fillSelect(select, values) {
+  if (!select) return;
+  // Wipe existing options except the first placeholder.
+  while (select.options.length > 1) select.remove(1);
+  for (const v of values || []) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    select.appendChild(opt);
+  }
 }
 
 function openFlaggedPanel() {

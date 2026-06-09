@@ -2121,6 +2121,63 @@ body:not(.is-signed-in) #step-out-btn { display: none !important; }
 }
 .teacher-response-card .submission-time { font-size: 14px; color: var(--text-muted); }
 
+/* Inline resolution-report form (in the Flagged panel) */
+.resolve-form {
+  margin-top: 14px;
+  padding: 16px 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+}
+.resolve-form-title {
+  margin: 0 0 12px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+.resolve-field { display: block; margin-bottom: 12px; }
+.resolve-field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.resolve-field-label .required { color: var(--rose); margin-left: 2px; }
+.resolve-field-label .resolve-field-hint { color: var(--text-muted); font-weight: 400; }
+.resolve-form select,
+.resolve-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+}
+.resolve-form select:focus,
+.resolve-form textarea:focus {
+  outline: none;
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+.resolve-error:not(:empty) { color: var(--rose); margin: 4px 0 0; }
+.resolve-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.resolve-actions .btn,
+.resolve-actions .btn-success {
+  padding: 8px 14px;
+  font-size: 13px;
+  min-height: 36px;
+}
+
+.row-resolved.all-resolved { color: var(--emerald); font-weight: 800; }
+
 .flagged-source-pill {
   display: inline-flex;
   align-items: center;

@@ -76,6 +76,7 @@ function renderStats(s) {
     { label: 'Total responses', value: s.total_responses, accent: 'cyan' },
     { label: 'Students reached', value: s.total_students, accent: 'violet' },
     { label: 'Flagged', value: s.flagged_count, accent: 'rose', sub: s.unresolved_flagged ? `${s.unresolved_flagged} unresolved` : 'all resolved' },
+    { label: 'Resolved this week', value: s.resolved_this_week || 0, accent: 'violet', sub: 'reports you filed' },
     { label: 'Check-outs routed to you', value: s.total_checkouts, accent: 'amber', sub: s.active_checkouts ? `${s.active_checkouts} active` : 'none active' },
   ];
   grid.innerHTML = '';
@@ -193,6 +194,7 @@ function renderStudentsTable(students) {
       <td class="num"></td>
       <td class="num"></td>
       <td class="num row-flagged"></td>
+      <td class="num row-resolved"></td>
       <td class="row-time"></td>
     `;
     tr.querySelector('.row-title').textContent = s.name || '(no name)';
@@ -200,6 +202,9 @@ function renderStudentsTable(students) {
     tr.cells[2].textContent = s.response_count;
     tr.cells[3].textContent = s.prompts_responded;
     tr.querySelector('.row-flagged').textContent = s.flagged_count;
+    const resolvedCell = tr.querySelector('.row-resolved');
+    resolvedCell.textContent = (s.resolved_count != null ? s.resolved_count : 0);
+    if (s.flagged_count > 0 && s.resolved_count >= s.flagged_count) resolvedCell.classList.add('all-resolved');
     tr.querySelector('.row-time').textContent = friendlyTime(s.last_active);
     tr.addEventListener('click', (e) => {
       if (e.target.closest('a')) return;

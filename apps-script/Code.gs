@@ -14,6 +14,34 @@ const CHECKOUTS_SHEET = 'CheckOuts';
 const CHECKOUTS_HEADERS = ['id', 'student_email', 'student_name', 'google_sub', 'destination', 'teacher_email', 'notes', 'checked_out_at', 'checked_in_at', 'status', 'warning_sent'];
 const FLAGGED_INTERACTIONS_SHEET = 'FlaggedInteractions';
 const FLAGGED_INTERACTIONS_HEADERS = ['id', 'created_at', 'student_email', 'student_name', 'google_sub', 'source', 'context', 'body', 'flag_reason', 'resolved'];
+const RESOLUTIONS_SHEET = 'Resolutions';
+const RESOLUTIONS_HEADERS = ['id', 'flag_id', 'flag_source', 'student_email', 'student_name', 'google_sub', 'resolved_by_email', 'resolved_by_name', 'resolved_at', 'action_taken', 'severity', 'followup', 'notes'];
+
+// Closed list of allowed values for each report dropdown. Same constants used
+// in the frontend so the menus stay in sync with what the sheet accepts.
+const RESOLUTION_ACTIONS = [
+  'Spoke with student in person',
+  'Contacted parents / guardians',
+  'Referred to school counsellor',
+  'Referred to admin / principal',
+  'Logged for monitoring',
+  'False positive — no action needed',
+  'Other',
+];
+const RESOLUTION_SEVERITIES = [
+  'Low — minor concern',
+  'Moderate — needs attention',
+  'Serious — safeguarding concern',
+  'Critical — emergency response',
+  'False positive',
+];
+const RESOLUTION_FOLLOWUPS = [
+  'None needed',
+  'Check in tomorrow',
+  'Check in this week',
+  'Ongoing weekly support',
+  'Ongoing safeguarding case',
+];
 const DEFAULT_OVERDUE_MINUTES = 10;
 const EVENTS_HEADERS = ['server_timestamp', 'email', 'name', 'google_sub', 'action', 'client_timestamp'];
 const PROMPTS_HEADERS = ['id', 'created_at', 'teacher_email', 'title', 'body', 'status', 'closes_at', 'audience', 'shared_from', 'type', 'options_json', 'correct_option', 'rating_scale'];
@@ -179,7 +207,11 @@ function doPost(e) {
 
       case 'resolve_flagged_response':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
-        return jsonOut_(resolveFlaggedResponse_(payload.response_id || ''));
+        return jsonOut_(resolveFlaggedResponse_(claims, payload));
+
+      case 'get_resolution_options':
+        if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
+        return jsonOut_({ ok: true, options: getResolutionOptions_() });
 
       case 'list_students_for_prompt':
         if (!isTeacher_(claims.email)) return jsonOut_({ ok: false, error: 'not a teacher' });
@@ -966,6 +998,7 @@ function getStudentProfile_(claims, googleSub, studentEmail) {
       total_responses: responses.length,
       flagged_count: flagged.length,
       unresolved_flagged_count: flagged.filter(r => !r.resolved).length,
+      resolved_count: countResolutionsForStudent_(subOut, studentEmailOut),
       avg_rating: avgRating,
       prompts_responded: Object.keys(respByPrompt).length,
       prompts_available: myPromptDetails.length,
@@ -981,6 +1014,7 @@ function getStudentProfile_(claims, googleSub, studentEmail) {
     prompts: myPromptDetails,
     flagged: flagged,
     checkouts: checkouts,
+    resolutions: recentResolutionsForStudent_(subOut, studentEmailOut, 25),
   };
 }
 
@@ -1253,6 +1287,7 @@ function getTeacherDashboard_(claims) {
     google_sub: s.google_sub,
     response_count: s.response_count,
     flagged_count: s.flagged_count,
+    resolved_count: countResolutionsForStudent_(s.google_sub, s.email),
     prompts_responded: s.prompts.size,
     last_active: s.last_active,
   })).sort((a, b) => (a.last_active < b.last_active ? 1 : -1));
@@ -1287,6 +1322,21 @@ function getTeacherDashboard_(claims) {
       }));
   }
 
+  // Resolutions handled this teacher this week
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const myEmailLower = String(claims.email).toLowerCase();
+  let resolvedByMeThisWeek = 0;
+  const resSheet = getOrCreateSheet_(RESOLUTIONS_SHEET, RESOLUTIONS_HEADERS);
+  const resLast = resSheet.getLastRow();
+  if (resLast >= 2) {
+    const values = resSheet.getRange(2, 1, resLast - 1, RESOLUTIONS_HEADERS.length).getValues();
+    for (const r of values) {
+      if (String(r[6] || '').toLowerCase() !== myEmailLower) continue;
+      const ts = r[8] instanceof Date ? r[8].getTime() : new Date(r[8]).getTime();
+      if (ts >= sevenDaysAgo) resolvedByMeThisWeek++;
+    }
+  }
+
   return {
     summary: {
       total_prompts: promptList.length,
@@ -1294,6 +1344,7 @@ function getTeacherDashboard_(claims) {
       total_students: studentsForUI.length,
       flagged_count: myResponses.filter(r => r.flagged).length,
       unresolved_flagged: myResponses.filter(r => r.flagged && !r.resolved).length,
+      resolved_this_week: resolvedByMeThisWeek,
       total_checkouts: checkoutsForMe.length,
       active_checkouts: checkoutsForMe.filter(c => String(c.status).toLowerCase() === 'out').length,
     },
@@ -2361,33 +2412,135 @@ function listFlaggedResponses_(includeResolved) {
   return items.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
-function resolveFlaggedResponse_(responseId) {
-  if (!responseId) return { ok: false, error: 'response_id required' };
+function resolveFlaggedResponse_(claims, payload) {
+  const id = String(payload.response_id || '').trim();
+  if (!id) return { ok: false, error: 'response_id required' };
+
+  const action = String(payload.action_taken || '').trim();
+  const severity = String(payload.severity || '').trim();
+  const followup = String(payload.followup || '').trim();
+  const notes = String(payload.notes || '').slice(0, 500);
+
+  if (!action) return { ok: false, error: 'action_taken required' };
+  if (!severity) return { ok: false, error: 'severity required' };
+  if (!followup) return { ok: false, error: 'followup required' };
+  if (RESOLUTION_ACTIONS.indexOf(action) === -1) return { ok: false, error: 'invalid action_taken' };
+  if (RESOLUTION_SEVERITIES.indexOf(severity) === -1) return { ok: false, error: 'invalid severity' };
+  if (RESOLUTION_FOLLOWUPS.indexOf(followup) === -1) return { ok: false, error: 'invalid followup' };
+
+  let flagSource = '';
+  let student = null;
 
   // Try the Responses sheet first (resolved column = 14)
   const respSheet = getOrCreateSheet_(RESPONSES_SHEET, RESPONSES_HEADERS);
-  if (markResolvedById_(respSheet, responseId, 14)) {
-    return { ok: true, response_id: responseId };
-  }
-  // Then FlaggedInteractions (resolved column = 10)
-  const intSheet = getOrCreateSheet_(FLAGGED_INTERACTIONS_SHEET, FLAGGED_INTERACTIONS_HEADERS);
-  if (markResolvedById_(intSheet, responseId, 10)) {
-    return { ok: true, response_id: responseId };
-  }
-  return { ok: false, error: 'not found' };
-}
-
-function markResolvedById_(sheet, id, resolvedColumn) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return false;
-  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (ids[i][0] === id) {
-      sheet.getRange(i + 2, resolvedColumn).setValue(true);
-      return true;
+  const respLast = respSheet.getLastRow();
+  if (respLast >= 2) {
+    const values = respSheet.getRange(2, 1, respLast - 1, RESPONSES_HEADERS.length).getValues();
+    for (let i = 0; i < values.length; i++) {
+      if (values[i][0] === id) {
+        respSheet.getRange(i + 2, 14).setValue(true);
+        student = { email: values[i][2], name: values[i][3], sub: values[i][4] };
+        flagSource = 'response';
+        break;
+      }
     }
   }
-  return false;
+  // Then FlaggedInteractions (resolved column = 10)
+  if (!student) {
+    const intSheet = getOrCreateSheet_(FLAGGED_INTERACTIONS_SHEET, FLAGGED_INTERACTIONS_HEADERS);
+    const intLast = intSheet.getLastRow();
+    if (intLast >= 2) {
+      const values = intSheet.getRange(2, 1, intLast - 1, FLAGGED_INTERACTIONS_HEADERS.length).getValues();
+      for (let i = 0; i < values.length; i++) {
+        if (values[i][0] === id) {
+          intSheet.getRange(i + 2, 10).setValue(true);
+          student = { email: values[i][2], name: values[i][3], sub: values[i][4] };
+          flagSource = String(values[i][5] || 'interaction');
+          break;
+        }
+      }
+    }
+  }
+  if (!student) return { ok: false, error: 'flag not found' };
+
+  // Log the resolution report
+  const resSheet = getOrCreateSheet_(RESOLUTIONS_SHEET, RESOLUTIONS_HEADERS);
+  const resolutionId = Utilities.getUuid();
+  resSheet.appendRow([
+    resolutionId,
+    id,
+    flagSource,
+    student.email,
+    student.name || '',
+    student.sub,
+    claims.email,
+    claims.name || '',
+    new Date(),
+    action,
+    severity,
+    followup,
+    notes,
+  ]);
+
+  return { ok: true, flag_id: id, resolution_id: resolutionId };
+}
+
+// Surfaces the closed-list option sets to the client so dropdown menus stay
+// in sync with what the backend will accept.
+function getResolutionOptions_() {
+  return {
+    actions: RESOLUTION_ACTIONS,
+    severities: RESOLUTION_SEVERITIES,
+    followups: RESOLUTION_FOLLOWUPS,
+  };
+}
+
+// All-time resolutions for one student (matched by sub when available,
+// falling back to email).
+function countResolutionsForStudent_(sub, email) {
+  const sheet = getOrCreateSheet_(RESOLUTIONS_SHEET, RESOLUTIONS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+  const values = sheet.getRange(2, 1, lastRow - 1, RESOLUTIONS_HEADERS.length).getValues();
+  const subKey = String(sub || '');
+  const emailKey = String(email || '').toLowerCase();
+  let count = 0;
+  for (const r of values) {
+    const matchSub = subKey && r[5] === subKey;
+    const matchEmail = emailKey && String(r[3] || '').toLowerCase() === emailKey;
+    if (matchSub || matchEmail) count++;
+  }
+  return count;
+}
+
+// Returns the most recent N resolution rows for one student.
+function recentResolutionsForStudent_(sub, email, max) {
+  const sheet = getOrCreateSheet_(RESOLUTIONS_SHEET, RESOLUTIONS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, RESOLUTIONS_HEADERS.length).getValues();
+  const subKey = String(sub || '');
+  const emailKey = String(email || '').toLowerCase();
+  const out = [];
+  for (const r of values) {
+    const matchSub = subKey && r[5] === subKey;
+    const matchEmail = emailKey && String(r[3] || '').toLowerCase() === emailKey;
+    if (!(matchSub || matchEmail)) continue;
+    out.push({
+      id: r[0],
+      flag_id: r[1],
+      flag_source: r[2],
+      resolved_by_email: r[6],
+      resolved_by_name: r[7],
+      resolved_at: r[8] instanceof Date ? r[8].toISOString() : String(r[8]),
+      action_taken: r[9],
+      severity: r[10],
+      followup: r[11],
+      notes: r[12] || '',
+    });
+  }
+  out.sort((a, b) => (a.resolved_at < b.resolved_at ? 1 : -1));
+  return max ? out.slice(0, max) : out;
 }
 
 function listStudentsForPrompt_(promptId) {
